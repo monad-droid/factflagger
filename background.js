@@ -120,9 +120,10 @@ const CLAIMS_SCHEMA = {
         properties: {
           t: { type: 'number' },
           claim: { type: 'string' },
-          quote: { type: 'string' }
+          quote: { type: 'string' },
+          checkworthiness: { type: 'integer' }
         },
-        required: ['t', 'claim', 'quote'],
+        required: ['t', 'claim', 'quote', 'checkworthiness'],
         additionalProperties: false
       }
     }
@@ -159,15 +160,25 @@ async function detectClaimsInChunk(chunk, meta, settings, onWait) {
   }
 
   const claims = Array.isArray(json.claims) ? json.claims : [];
-  return claims
-    .filter((c) => c && typeof c.claim === 'string' && c.claim.trim())
+  const valid = claims.filter((c) => c && typeof c.claim === 'string' && c.claim.trim());
+  const kept = valid.filter((c) => Number(c.checkworthiness) >= P.minCheckworthiness);
+  if (valid.length !== kept.length) {
+    console.info(LOG, `chunk ${fmtTime(chunk.start)}: dropped ${valid.length - kept.length} low-scoring claim(s)`);
+  }
+  return kept
+    .sort((a, b) => b.checkworthiness - a.checkworthiness)
     .slice(0, P.maxClaimsPerChunk)
     .map((c) => {
       // Snap the timestamp to the start of the transcript line it falls in.
       let t = Number(c.t);
       if (!Number.isFinite(t) || t < chunk.start || t > chunk.end) t = chunk.start;
       const line = [...chunk.segments].reverse().find((s) => s.start <= t + 0.5) || chunk.segments[0];
-      return { t: line.start, claim: c.claim.trim(), quote: (c.quote || '').trim() };
+      return {
+        t: line.start,
+        claim: c.claim.trim(),
+        quote: (c.quote || '').trim(),
+        checkworthiness: Number(c.checkworthiness)
+      };
     });
 }
 

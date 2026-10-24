@@ -220,10 +220,19 @@
     return state.note ? `${progress} · ${state.note}` : progress;
   }
 
+  let loggedClaimsFor = null;
+
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg?.type !== 'STATE' || msg.state?.videoId !== currentVideoId) return;
     Overlay.setStatus(statusFromState(msg.state));
     Overlay.setClaims(msg.state.claims);
+    if (msg.state.status === 'done' && loggedClaimsFor !== currentVideoId) {
+      loggedClaimsFor = currentVideoId;
+      console.info(LOG, `${msg.state.claims.length} claims found:`);
+      console.table(msg.state.claims.map((c) => ({
+        time: fmtTime(c.t), score: c.checkworthiness, claim: c.claim, quote: c.quote
+      })));
+    }
   });
 
   function onNavigate() {
