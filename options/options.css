@@ -19,4 +19,11 @@ button#save { background: var(--accent); color: #fff; border-color: var(--accent
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
 #status.ok { color: var(--ok); }
 #status.err { color: var(--accent); }
+h2 { font-size: 18px; margin-top: 32px; }
+.meter { margin: 12px 0; }
+.meter-label { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
+.meter-label span:last-child { color: var(--muted); text-align: right; }
+.meter-bar { height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; margin-top: 4px; }
+.meter-fill { height: 100%; background: var(--ok); }
+.meter-fill.low { background: var(--accent); }
 pre { white-space: pre-wrap; font-size: 12px; border: 1px solid var(--border); border-radius: 6px; padding: 8px; max-height: 240px; overflow: auto; }

@@ -40,6 +40,16 @@
     </div>
     <p id="status" role="status"></p>
     <pre id="details" hidden></pre>
+
+    <h2>Free budget</h2>
+    <div id="budget"><p class="note">Loading…</p></div>
+    <p class="note">
+      Tavily numbers come from Tavily. Groq "requests left" comes from Groq's last reply;
+      Groq tokens are counted by FactFlag and compared with Groq's documented 200,000/day
+      base limit (your account's real limit is on Groq's Limits page). Groq's daily
+      limits reset at midnight UTC.
+    </p>
+    <button type="button" id="refreshBudget">Refresh</button>
   </main>
   <script src="../shared/defaults.js"></script>
   <script src="options.js"></script>

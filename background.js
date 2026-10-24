@@ -1,6 +1,6 @@
 // FactFlag background service worker.
 // All calls to outside APIs (Groq, Tavily) happen here, never in the content script.
-importScripts('shared/defaults.js', 'prompts.js', 'lib/groq.js', 'lib/tavily.js');
+importScripts('shared/defaults.js', 'prompts.js', 'lib/groq.js', 'lib/tavily.js', 'lib/budget.js');
 
 const GROQ_BASE = 'https://api.groq.com/openai/v1';
 const CHUNK_SECONDS = 120;
@@ -42,40 +42,6 @@ async function testGroq() {
     verdictModel: s.verdictModel,
     available: ids.sort()
   };
-}
-
-// ---------------------------------------------------------------------------
-// Per-video state. Kept in chrome.storage.session so it survives the service
-// worker going to sleep; cleared when the browser closes.
-// ---------------------------------------------------------------------------
-const videoKey = (videoId) => `video:${videoId}`;
-const tabsWatching = new Map(); // tabId -> videoId
-const jobs = new Map();         // videoId -> { cancelled, playhead, ... }
-
-async function loadState(videoId) {
-  return (await chrome.storage.session.get(videoKey(videoId)))[videoKey(videoId)] || null;
-}
-
-async function saveState(state) {
-  await chrome.storage.session.set({ [videoKey(state.videoId)]: state });
-  for (const [tabId, vid] of tabsWatching) {
-    if (vid === state.videoId) {
-      chrome.tabs.sendMessage(tabId, { type: 'STATE', state }).catch(() => tabsWatching.delete(tabId));
-    }
-  }
-}
-
-// The worker can be shut down after ~30s without extension activity, which would
-// kill a long scan (e.g. while waiting out a rate limit). A cheap API call every
-// 20s while work is running keeps it awake.
-let keepAliveTimer = null;
-function updateKeepAlive() {
-  if (jobs.size && !keepAliveTimer) {
-    keepAliveTimer = setInterval(() => chrome.runtime.getPlatformInfo(), 20000);
-  } else if (!jobs.size && keepAliveTimer) {
-    clearInterval(keepAliveTimer);
-    keepAliveTimer = null;
-  }
 }
 
 function fmtTime(sec) {
@@ -147,20 +113,6 @@ function makeChunks(segments) {
   return chunks;
 }
 
-// Work outward from the viewer: whatever is at or just ahead of the playhead
-// first, moving forward; things already behind the playhead come last
-// (nearest first).
-function pickNearest(items, playhead, startOf, endOf) {
-  let best = null;
-  let bestRank = Infinity;
-  for (const it of items) {
-    const ahead = endOf(it) >= playhead;
-    const rank = ahead ? Math.max(0, startOf(it) - playhead) : 1e9 + (playhead - endOf(it));
-    if (rank < bestRank) { bestRank = rank; best = it; }
-  }
-  return best;
-}
-
 const CLAIMS_SCHEMA = {
   type: 'object',
   properties: {
@@ -195,7 +147,7 @@ async function detectClaimsInChunk(chunk, meta, settings, concepts, onWait) {
   const asLines = (list) => list.map((s) => `[${Math.floor(s.start)}] ${s.text}`).join('\n');
   const transcript = asLines(chunk.sentences);
   const context = chunk.context.length ? asLines(chunk.context) : '(start of video)';
-  const { json, usage } = await groqChatJson({
+  const { json, usage, limits } = await groqChatJson({
     apiKey: settings.groqApiKey,
     model: settings.detectionModel,
     system: fill(P.claimDetectionSystem, { MAX_CLAIMS: P.maxClaimsPerChunk }),
@@ -212,6 +164,7 @@ async function detectClaimsInChunk(chunk, meta, settings, concepts, onWait) {
     reasoningEffort: P.detectionReasoningEffort,
     onWait
   });
+  recordGroqCall(settings.detectionModel, usage, limits);
   if (usage) {
     console.info(LOG, `chunk ${fmtTime(chunk.start)}: ${usage.total_tokens} tokens ` +
       `(prompt ${usage.prompt_tokens}, completion ${usage.completion_tokens})`);
@@ -273,6 +226,7 @@ async function verifyClaim(claim, meta, settings, onWait) {
     maxResults: P.searchResultsPerClaim,
     onWait
   });
+  recordTavilySearch();
   if (!results.length) {
     return { verdict: 'UNVERIFIABLE', explanation: 'The web search returned no results.', sourceUrl: '', sourceTitle: '' };
   }
@@ -280,7 +234,7 @@ async function verifyClaim(claim, meta, settings, onWait) {
     `[${i + 1}] ${r.title}\nURL: ${r.url}${r.published ? `\nPublished: ${r.published}` : ''}\n${r.content}`
   ).join('\n\n');
 
-  const { json, usage } = await groqChatJson({
+  const { json, usage, limits } = await groqChatJson({
     apiKey: settings.groqApiKey,
     model: settings.verdictModel,
     system: P.verdictSystem,
@@ -296,6 +250,7 @@ async function verifyClaim(claim, meta, settings, onWait) {
     reasoningEffort: P.verdictReasoningEffort,
     onWait
   });
+  recordGroqCall(settings.verdictModel, usage, limits);
   if (usage) {
     console.info(LOG, `verdict ${fmtTime(claim.t)}: ${usage.total_tokens} tokens ` +
       `(prompt ${usage.prompt_tokens}, completion ${usage.completion_tokens})`);
@@ -347,158 +302,354 @@ function falseVerdictProblem({ source, evidenceQuote, explanation }) {
   return '';
 }
 
-// Errors that should stop all checking for this video rather than skip one claim.
+// Errors that should stop all checking for this video rather than skip one item.
 function isFatal(e) {
   return e?.fatal === true || e?.status === 401;
 }
 
-async function detectLoop(job, state, chunks, meta, settings) {
-  const pending = new Set(chunks);
-  const concepts = new Set();
-  let nextId = 1;
-  while (pending.size && !job.cancelled) {
-    const chunk = pickNearest(pending, job.playhead, (c) => c.start, (c) => c.end);
-    pending.delete(chunk);
-    const found = await detectClaimsInChunk(chunk, meta, settings, concepts, (secs) => {
-      state.note = `Groq rate limit — waiting ${secs}s`;
-      saveState(state);
-    });
-    if (job.cancelled) return;
-    if (concepts.size) console.info(LOG, `speaker's own concepts so far: ${[...concepts].join('; ')}`);
-    for (const c of found) state.claims.push({ id: nextId++, status: 'pending', ...c });
-    state.claims.sort((a, b) => a.t - b.t);
-    state.chunksDone++;
-    state.note = '';
-    job.wake?.();
-    await saveState(state);
+// ---------------------------------------------------------------------------
+// Triage: decide which claims are worth a (scarce) web search.
+// ---------------------------------------------------------------------------
+const TRIAGE_SCHEMA = {
+  type: 'object',
+  properties: {
+    results: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          assessment: { type: 'string', enum: ['likely_true', 'unsure', 'possibly_false'] },
+          reason: { type: 'string' }
+        },
+        required: ['id', 'assessment', 'reason'],
+        additionalProperties: false
+      }
+    }
+  },
+  required: ['results'],
+  additionalProperties: false
+};
+
+async function triageClaims(claims, meta, settings, onWait) {
+  const P = self.FACTFLAG_PROMPTS;
+  const list = claims
+    .map((c) => `[${c.id}] (${fmtTime(c.t)}) ${c.claim}\n    Speaker's words: "${c.quote}"`)
+    .join('\n');
+  const { json, usage, limits } = await groqChatJson({
+    apiKey: settings.groqApiKey,
+    model: settings.verdictModel,
+    system: P.triageSystem,
+    user: fill(P.triageUser, {
+      TITLE: meta.title || 'unknown',
+      PUBLISHED: meta.published || 'unknown',
+      CLAIMS: list
+    }),
+    schemaName: 'triage',
+    schema: TRIAGE_SCHEMA,
+    reasoningEffort: P.triageReasoningEffort,
+    onWait
+  });
+  recordGroqCall(settings.verdictModel, usage, limits);
+
+  const byId = new Map((Array.isArray(json.results) ? json.results : []).map((r) => [Number(r.id), r]));
+  for (const c of claims) {
+    const r = byId.get(c.id);
+    // Anything missing or malformed counts as "unsure" — it still gets searched.
+    const a = ['likely_true', 'unsure', 'possibly_false'].includes(r?.assessment) ? r.assessment : 'unsure';
+    c.triage = a;
+    c.triageReason = String(r?.reason || '').trim();
+    if (a === 'likely_true') c.status = 'skipped';
+  }
+  const skipped = claims.filter((c) => c.status === 'skipped').length;
+  console.info(LOG, `triage: ${skipped} of ${claims.length} claim(s) judged likely true — not searched`);
+}
+
+// ---------------------------------------------------------------------------
+// Just-in-time checking.
+// Only work on what's within LOOKAHEAD_SECONDS ahead of where the viewer is
+// listening (scaled up at faster playback speeds). Videos you abandon cost only
+// what you heard plus that window. Progress is saved after every step so the
+// work resumes exactly where it left off if the service worker goes to sleep.
+// ---------------------------------------------------------------------------
+const LOOKAHEAD_SECONDS = 150;
+const BEHIND_SLACK_SECONDS = 15; // a claim that started a moment ago is still being heard
+const STATE_VERSION = 2;
+
+const videoKey = (videoId) => `video:${videoId}`;
+const transcriptKey = (videoId) => `transcript:${videoId}`;
+const tabsWatching = new Map(); // tabId -> videoId
+const jobs = new Map();         // videoId -> in-memory job (rebuilt from storage when needed)
+
+async function loadState(videoId) {
+  return (await chrome.storage.session.get(videoKey(videoId)))[videoKey(videoId)] || null;
+}
+
+async function saveState(state) {
+  await chrome.storage.session.set({ [videoKey(state.videoId)]: state });
+  for (const [tabId, vid] of tabsWatching) {
+    if (vid === state.videoId) {
+      chrome.tabs.sendMessage(tabId, { type: 'STATE', state }).catch(() => tabsWatching.delete(tabId));
+    }
   }
 }
 
-async function verifyLoop(job, state, meta, settings) {
-  while (!job.cancelled) {
-    const pending = state.claims.filter((c) => c.status === 'pending');
-    if (!pending.length) {
-      if (job.detectDone) return;
-      await new Promise((resolve) => { job.wake = resolve; });
-      job.wake = null;
-      continue;
-    }
-    const claim = pickNearest(pending, job.playhead, (c) => c.t, (c) => c.t);
-    claim.status = 'checking';
-    try {
-      const result = await verifyClaim(claim, meta, settings, (secs) => {
-        state.note = `rate limit — waiting ${secs}s`;
-        saveState(state);
-      });
-      if (job.cancelled) return;
-      Object.assign(claim, result, { status: 'done' });
-      console.info(LOG, `${fmtTime(claim.t)} ${claim.verdict}: ${claim.claim}`);
-    } catch (e) {
-      if (isFatal(e)) throw e;
-      console.warn(LOG, `Could not check claim at ${fmtTime(claim.t)}: ${e.message}`);
-      Object.assign(claim, { status: 'error', error: e.message });
-    }
-    state.checked = state.claims.filter((c) => c.status === 'done' || c.status === 'error').length;
-    state.note = '';
-    await saveState(state);
+// The worker is shut down after ~30s without extension activity. Keep it awake
+// only while a job is actually working (including waiting out a rate limit);
+// an idle job is rebuilt from storage on the next playhead update.
+let keepAliveTimer = null;
+function updateKeepAlive() {
+  const busy = [...jobs.values()].some((j) => j.busy);
+  if (busy && !keepAliveTimer) {
+    keepAliveTimer = setInterval(() => chrome.runtime.getPlatformInfo(), 20000);
+  } else if (!busy && keepAliveTimer) {
+    clearInterval(keepAliveTimer);
+    keepAliveTimer = null;
   }
 }
 
-async function runVideo(videoId, segments, meta, playhead) {
-  const job = { cancelled: false, playhead, detectDone: false, wake: null };
-  jobs.set(videoId, job);
-  updateKeepAlive();
-
-  const chunks = makeChunks(segments);
-  const state = {
+function newState(videoId, meta, chunkCount) {
+  return {
+    version: STATE_VERSION,
     videoId,
     title: meta.title || '',
-    status: 'scanning',
-    chunksTotal: chunks.length,
-    chunksDone: 0,
-    checked: 0,
+    status: 'working',      // working | idle | done | error
+    chunksTotal: chunkCount,
+    chunksDone: [],         // indexes of chunks already scanned for claims
     claims: [],
+    concepts: [],           // the speaker's own metaphors/characters
+    nextId: 1,
     note: '',
     error: ''
   };
-  await saveState(state);
+}
 
+function windowFor(job) {
+  const ahead = LOOKAHEAD_SECONDS * Math.max(1, job.rate || 1);
+  return { from: job.playhead - BEHIND_SLACK_SECONDS, to: job.playhead + ahead };
+}
+
+// The earliest thing inside the window: scanning a chunk for claims, or
+// checking a claim. On a tie the chunk goes first (it may hold earlier claims).
+function nextWork(job) {
+  const { from, to } = windowFor(job);
+  let best = null;
+  let bestTime = Infinity;
+  job.chunks.forEach((c, index) => {
+    if (job.state.chunksDone.includes(index) || c.end < from || c.start > to) return;
+    const time = Math.max(c.start, from);
+    if (time < bestTime) { bestTime = time; best = { kind: 'chunk', index }; }
+  });
+  for (const claim of job.state.claims) {
+    if (claim.status !== 'pending' || claim.t < from || claim.t > to) continue;
+    if (claim.t < bestTime) { bestTime = claim.t; best = { kind: 'claim', claim }; }
+  }
+  return best;
+}
+
+function everythingDone(job) {
+  return job.state.chunksDone.length >= job.chunks.length &&
+    !job.state.claims.some((c) => c.status === 'pending' || c.status === 'checking');
+}
+
+async function processChunk(job, index, settings, onWait) {
+  const { state } = job;
+  const found = await detectClaimsInChunk(job.chunks[index], job.meta, settings, job.concepts, onWait);
+  state.concepts = [...job.concepts];
+  if (job.concepts.size) console.info(LOG, `speaker's own concepts so far: ${state.concepts.join('; ')}`);
+  const claims = found.map((c) => ({ id: state.nextId++, status: 'pending', ...c }));
+
+  if (claims.length && self.FACTFLAG_PROMPTS.triageEnabled) {
+    try {
+      await triageClaims(claims, job.meta, settings, onWait);
+    } catch (e) {
+      if (isFatal(e)) throw e;
+      // If triage fails, search everything rather than risk missing something.
+      console.warn(LOG, `triage failed (${e.message}) — all claims in this section will be searched`);
+    }
+  }
+  if (job.cancelled) return;
+  state.claims.push(...claims);
+  state.claims.sort((a, b) => a.t - b.t);
+  state.chunksDone.push(index);
+}
+
+async function processClaim(job, claim, settings, onWait) {
+  claim.status = 'checking';
+  try {
+    const result = await verifyClaim(claim, job.meta, settings, onWait);
+    if (job.cancelled) { claim.status = 'pending'; return; }
+    Object.assign(claim, result, { status: 'done' });
+    console.info(LOG, `${fmtTime(claim.t)} ${claim.verdict}: ${claim.claim}`);
+  } catch (e) {
+    if (isFatal(e)) { claim.status = 'pending'; throw e; }
+    console.warn(LOG, `Could not check claim at ${fmtTime(claim.t)}: ${e.message}`);
+    Object.assign(claim, { status: 'error', error: e.message });
+  }
+}
+
+async function runJob(job) {
+  const { state } = job;
+  const chunkFailures = new Map();
+  const onWait = (secs) => {
+    state.note = `rate limit — waiting ${secs}s`;
+    saveState(state);
+  };
   try {
     const settings = await getSettings();
-    if (!settings.groqApiKey) throw new Error('Add your Groq API key in FactFlag settings.');
-    if (!settings.tavilyApiKey) throw new Error('Add your Tavily API key in FactFlag settings.');
+    if (!settings.groqApiKey) throw Object.assign(new Error('Add your Groq API key in FactFlag settings.'), { fatal: true });
+    if (!settings.tavilyApiKey) throw Object.assign(new Error('Add your Tavily API key in FactFlag settings.'), { fatal: true });
+    refreshTavilyUsage(settings.tavilyApiKey, false).catch(() => {});
 
-    // Finding claims and checking them run side by side (they use different
-    // models, so they don't compete for the same rate limits).
-    const verifying = verifyLoop(job, state, meta, settings).catch((e) => {
-      job.fatalError = e;   // e.g. Tavily key rejected or monthly limit hit:
-      job.cancelled = true; // stop finding claims too, no point continuing
-    });
-    try {
-      await detectLoop(job, state, chunks, meta, settings);
-    } finally {
-      job.detectDone = true;
-      job.wake?.();
+    while (!job.cancelled) {
+      const work = nextWork(job);
+      if (!work) {
+        const settled = everythingDone(job) ? 'done' : 'idle';
+        if (state.status !== settled || state.note) {
+          state.status = settled;
+          state.note = '';
+          await saveState(state);
+        }
+        if (state.status === 'done') {
+          const falseCount = state.claims.filter((c) => c.verdict === 'FALSE').length;
+          console.info(LOG, `Finished ${job.videoId}: ${state.claims.length} claims, ${falseCount} false.`);
+          break;
+        }
+        // Nothing to do near the viewer — wait for them to keep watching or seek.
+        job.busy = false;
+        updateKeepAlive();
+        await new Promise((resolve) => { job.wake = resolve; });
+        job.wake = null;
+        continue;
+      }
+
+      job.busy = true;
+      updateKeepAlive();
+      if (state.status !== 'working') {
+        state.status = 'working';
+        await saveState(state);
+      }
+      if (work.kind === 'chunk') {
+        try {
+          await processChunk(job, work.index, settings, onWait);
+        } catch (e) {
+          if (isFatal(e)) throw e;
+          const fails = (chunkFailures.get(work.index) || 0) + 1;
+          chunkFailures.set(work.index, fails);
+          console.warn(LOG, `Scanning section ${work.index + 1} failed (${e.message})${fails >= 2 ? ' — skipping it' : ' — will retry'}`);
+          if (fails >= 2) state.chunksDone.push(work.index);
+          else await new Promise((r) => setTimeout(r, 5000));
+        }
+      } else {
+        await processClaim(job, work.claim, settings, onWait);
+      }
+      if (job.cancelled) break;
+      state.note = '';
+      await saveState(state);
     }
-    await verifying;
-    if (job.fatalError) throw job.fatalError;
-    if (job.cancelled) return;
-    state.status = 'done';
-    await saveState(state);
-    const falseCount = state.claims.filter((c) => c.verdict === 'FALSE').length;
-    console.info(LOG, `Finished ${videoId}: ${state.claims.length} claims checked, ${falseCount} false.`);
   } catch (e) {
-    job.cancelled = true;
-    job.wake?.();
-    console.error(LOG, `Checking stopped for ${videoId}:`, e.message);
+    console.error(LOG, `Checking stopped for ${job.videoId}:`, e.message);
     state.status = 'error';
     state.error = e.message;
     state.note = '';
     await saveState(state);
   } finally {
-    if (jobs.get(videoId) === job) jobs.delete(videoId);
+    job.busy = false;
+    if (jobs.get(job.videoId) === job) jobs.delete(job.videoId);
     updateKeepAlive();
   }
 }
 
-// Stop work for a video nobody is watching any more.
+// Start (or resume, or re-aim) checking for a video. Safe to call repeatedly.
+async function ensureJob(videoId, { playhead, rate, segments, meta }) {
+  const fromTranscript = Array.isArray(segments); // a page (re)load, not a playhead update
+  const existing = jobs.get(videoId);
+  if (existing) {
+    if (Number.isFinite(playhead)) existing.playhead = playhead;
+    if (Number.isFinite(rate)) existing.rate = rate;
+    existing.wake?.();
+    return;
+  }
+  // Register synchronously so a second message can't start a duplicate job.
+  const job = {
+    videoId, cancelled: false, busy: false, wake: null,
+    playhead: Number.isFinite(playhead) ? playhead : 0,
+    rate: Number.isFinite(rate) ? rate : 1
+  };
+  jobs.set(videoId, job);
+  try {
+    const settings = await getSettings();
+    if (!settings.enabled) { jobs.delete(videoId); return; }
+
+    if (segments) {
+      await chrome.storage.session.set({ [transcriptKey(videoId)]: { segments, meta } });
+    } else {
+      const saved = (await chrome.storage.session.get(transcriptKey(videoId)))[transcriptKey(videoId)];
+      if (!saved) { jobs.delete(videoId); return; } // transcript not loaded yet
+      segments = saved.segments;
+      meta = saved.meta;
+    }
+
+    const chunks = makeChunks(segments);
+    let state = await loadState(videoId);
+    if (!state || state.version !== STATE_VERSION || state.chunksTotal !== chunks.length) {
+      state = newState(videoId, meta, chunks.length);
+    }
+    if (state.status === 'done') {
+      jobs.delete(videoId);
+      await saveState(state); // re-send results to the tab
+      return;
+    }
+    // After a stopping error (daily/monthly limit, bad key) only retry when the
+    // page is reloaded — not on every playhead update, which would hammer the API.
+    if (state.status === 'error' && !fromTranscript) {
+      jobs.delete(videoId);
+      return;
+    }
+    // Resuming: anything interrupted mid-check goes back in the queue.
+    for (const c of state.claims) if (c.status === 'checking') c.status = 'pending';
+    state.status = 'working';
+    state.error = '';
+    state.note = '';
+
+    Object.assign(job, { state, chunks, meta, concepts: new Set(state.concepts || []) });
+    if (job.cancelled) return;
+    await saveState(state);
+    runJob(job);
+  } catch (e) {
+    console.error(LOG, `Could not start checking ${videoId}:`, e.message);
+    if (jobs.get(videoId) === job) jobs.delete(videoId);
+  }
+}
+
+// Stop work for a video nobody is watching any more. Results are kept, so
+// coming back to it resumes where it left off.
 function releaseVideo(tabId) {
   const old = tabsWatching.get(tabId);
   tabsWatching.delete(tabId);
-  if (!old) return;
-  if ([...tabsWatching.values()].includes(old)) return;
+  if (!old || [...tabsWatching.values()].includes(old)) return;
   const job = jobs.get(old);
   if (job) {
     job.cancelled = true;
     job.wake?.();
     jobs.delete(old);
-    // Clear the half-finished scan so it restarts cleanly next time.
-    chrome.storage.session.remove(videoKey(old));
     updateKeepAlive();
   }
 }
 
-async function onTranscript(tabId, msg) {
-  if (tabsWatching.get(tabId) !== msg.videoId) releaseVideo(tabId);
-  tabsWatching.set(tabId, msg.videoId);
-
-  const settings = await getSettings();
-  if (!settings.enabled) return;
-
-  const existing = await loadState(msg.videoId);
-  if (existing && (existing.status === 'done' || jobs.has(msg.videoId))) {
-    chrome.tabs.sendMessage(tabId, { type: 'STATE', state: existing }).catch(() => {});
-    return;
-  }
-  runVideo(
-    msg.videoId,
-    msg.segments,
-    { title: msg.title, channel: msg.channel, published: msg.published },
-    msg.playhead || 0
-  );
+function watch(tabId, videoId) {
+  if (tabsWatching.get(tabId) !== videoId) releaseVideo(tabId);
+  tabsWatching.set(tabId, videoId);
 }
 
 chrome.tabs.onRemoved.addListener((tabId) => releaseVideo(tabId));
+// A full page load (reload, or leaving YouTube in this tab) ends that page's
+// content script; if it's still a YouTube video it will report back in.
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status === 'loading' && tabsWatching.has(tabId) && changeInfo.url === undefined) {
+    releaseVideo(tabId);
+  }
+});
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === 'TEST_GROQ') {
@@ -507,20 +658,40 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg?.type === 'TEST_TAVILY') {
     getSettings()
-      .then((s) => (s.tavilyApiKey ? tavilyUsage(s.tavilyApiKey) : { ok: false, error: 'No Tavily API key saved yet.' }))
+      .then(async (s) => {
+        if (!s.tavilyApiKey) return { ok: false, error: 'No Tavily API key saved yet.' };
+        const r = await tavilyUsage(s.tavilyApiKey);
+        if (r.ok) await refreshTavilyUsage(s.tavilyApiKey, true);
+        return r;
+      })
       .catch((e) => ({ ok: false, error: `Network error: ${e.message}` }))
       .then(sendResponse);
     return true;
   }
+  if (msg?.type === 'GET_BUDGET') {
+    getSettings()
+      .then((s) => refreshTavilyUsage(s.tavilyApiKey, false).catch(() => null))
+      .then(() => getBudget())
+      .then((budget) => sendResponse({ budget }));
+    return true;
+  }
+
   const tabId = sender.tab?.id;
   if (tabId === undefined) return;
   if (msg?.type === 'TRANSCRIPT') {
-    onTranscript(tabId, msg);
+    watch(tabId, msg.videoId);
+    ensureJob(msg.videoId, {
+      playhead: msg.playhead,
+      rate: msg.rate,
+      segments: msg.segments,
+      meta: { title: msg.title, channel: msg.channel, published: msg.published }
+    });
+  } else if (msg?.type === 'PLAYHEAD') {
+    // Viewer is playing or seeked — re-aim the work at their position.
+    if (!msg.videoId) return;
+    watch(tabId, msg.videoId);
+    ensureJob(msg.videoId, { playhead: msg.time, rate: msg.rate });
   } else if (msg?.type === 'LEFT_VIDEO') {
     releaseVideo(tabId);
-  } else if (msg?.type === 'PLAYHEAD') {
-    // Viewer seeked or kept watching — re-aim the work at their new position.
-    const job = jobs.get(tabsWatching.get(tabId));
-    if (job && Number.isFinite(msg.time)) job.playhead = msg.time;
   }
 });

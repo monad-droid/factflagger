@@ -50,10 +50,16 @@
     });
   }
 
-  // ---- Fallback method: open YouTube's "Show transcript" panel and read it ----
-  // YouTube has renamed these elements several times, so we try old and new names.
-  const PANEL_SEL = 'ytd-engagement-panel-section-list-renderer[target-id*="transcript" i]';
-  const SEGMENT_SEL = 'transcript-segment-view-model, ytd-transcript-segment-renderer';
+  // ---- Fallback method: read YouTube's transcript panel ----
+  // YouTube renames its transcript elements often (in 2026 the transcript moved
+  // into an "In this video" panel with Chapters / Transcript tabs), so instead of
+  // relying on element names we find rows that start with a timestamp like
+  // "0:39" and read the text beside it.
+  const TS_RE = /^(?:\d{1,2}:)?\d{1,2}:\d{2}$/;
+  // Places that show timestamps but are NOT the transcript.
+  const NOT_TRANSCRIPT = '#movie_player, #comments, ytd-comments, #description, ytd-text-inline-expander, ' +
+    'ytd-macro-markers-list-item-renderer, [class*="factflag"]';
+  const PANEL_SEL = 'ytd-engagement-panel-section-list-renderer';
 
   function parseTimestamp(str) {
     const m = (str || '').trim().match(/^(\d+):(\d{2})(?::(\d{2}))?$/);
@@ -63,37 +69,65 @@
       : +m[1] * 60 + +m[2];
   }
 
-  function findSegmentEls() {
-    const inPanels = [...document.querySelectorAll(PANEL_SEL)]
-      .flatMap((p) => [...p.querySelectorAll(SEGMENT_SEL)]);
-    return inPanels.length ? inPanels : [...document.querySelectorAll('ytd-transcript-segment-renderer')];
-  }
+  // A screen-reader label next to the timestamp, e.g. "39 seconds" or "1 minute, 5 seconds".
+  const DURATION_LABEL = /^(\d+\s+(hours?|minutes?|seconds?),?\s*)+$/i;
 
-  function findTranscriptButton() {
-    const direct = document.querySelector('ytd-video-description-transcript-section-renderer button');
-    if (direct) return direct;
-    return [...document.querySelectorAll('button, ytd-button-renderer, yt-button-shape button')]
-      .find((b) => /show transcript/i.test(b.getAttribute('aria-label') || b.textContent || ''));
-  }
-
-  function readSegment(el) {
-    const tsEl = el.querySelector(
-      '.segment-timestamp, [class*="Timestamp"]:not([class*="A11y"]):not([class*="a11y"])'
-    );
-    const textEl = el.querySelector('.segment-text, .ytAttributedStringHost, [class*="SegmentText"]');
-    let ts = tsEl?.textContent?.trim();
-    let text = textEl?.textContent?.trim();
-    if (!ts || !text) {
-      // Last resort: first line that looks like a timestamp, the rest is text.
-      const parts = (el.innerText || el.textContent || '').split('\n').map((s) => s.trim()).filter(Boolean);
-      const i = parts.findIndex((p) => parseTimestamp(p) !== null);
-      if (i === -1) return null;
-      ts = ts || parts[i];
-      text = text || parts.filter((_, j) => j !== i).join(' ');
+  // The spoken text of a row: every text piece except the timestamp itself and a
+  // duration label that comes before the speech. (Removing "N seconds" anywhere
+  // would also delete real words like "at 30 seconds".)
+  function rowText(row, leaf) {
+    const parts = [];
+    const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (leaf.contains(node)) continue;
+      const piece = node.textContent.replace(/\s+/g, ' ').trim();
+      if (!piece) continue;
+      if (!parts.length && DURATION_LABEL.test(piece)) continue;
+      parts.push(piece);
     }
-    const start = parseTimestamp(ts);
-    if (start === null || !text) return null;
-    return { start, text: text.replace(/\s+/g, ' ') };
+    return parts.join(' ').replace(/\s+/g, ' ').trim();
+  }
+
+  // Returns [{ el, start, text }] for every visible transcript row on the page.
+  function findTranscriptRows() {
+    const leaves = [];
+    for (const el of document.querySelectorAll('body *')) {
+      if (el.children.length || !TS_RE.test((el.textContent || '').trim())) continue;
+      if (el.closest('a') || el.closest(NOT_TRANSCRIPT) || !el.getClientRects().length) continue;
+      leaves.push(el);
+    }
+    // For each timestamp, its row is the largest ancestor holding no other timestamp.
+    const count = new Map();
+    for (const leaf of leaves) {
+      for (let n = leaf.parentElement; n && n !== document.body; n = n.parentElement) {
+        count.set(n, (count.get(n) || 0) + 1);
+      }
+    }
+    const rows = [];
+    for (const leaf of leaves) {
+      let row = leaf;
+      while (row.parentElement && row.parentElement !== document.body && count.get(row.parentElement) === 1) {
+        row = row.parentElement;
+      }
+      const ts = leaf.textContent.trim();
+      const text = rowText(row, leaf);
+      const start = parseTimestamp(ts);
+      if (start !== null && text) rows.push({ el: row, start, text });
+    }
+    return rows;
+  }
+
+  function transcriptButtons() {
+    const label = (el) => (el.getAttribute('aria-label') || el.textContent || '').replace(/\s+/g, ' ').trim();
+    const clickable = [...document.querySelectorAll(
+      'button, [role="tab"], tp-yt-paper-tab, chip-view-model, yt-chip-cloud-chip-renderer'
+    )].filter((el) => !el.closest('#movie_player'));
+    const found = [
+      document.querySelector('ytd-video-description-transcript-section-renderer button'),
+      ...clickable.filter((el) => /^(show )?transcript$/i.test(label(el))),
+      ...clickable.filter((el) => /show transcript/i.test(label(el)))
+    ].filter(Boolean);
+    return [...new Set(found)];
   }
 
   function scrollableAncestor(el) {
@@ -104,38 +138,117 @@
     return null;
   }
 
-  async function scrapeTranscriptPanel(token) {
-    let openedByUs = false;
-    if (!findSegmentEls().length) {
-      // The button lives in the description; expanding it first makes it render reliably.
-      document.querySelector('ytd-text-inline-expander #expand, #description-inline-expander #expand')?.click();
-      await sleep(500);
-      const btn = findTranscriptButton();
-      if (!btn) return { ok: false, error: 'no "Show transcript" button found' };
-      btn.click();
-      openedByUs = true;
-    }
-
-    // Wait for segments to appear.
-    for (let i = 0; i < 40 && !findSegmentEls().length; i++) {
-      if (token !== runToken) return { ok: false, error: 'cancelled' };
+  async function waitForRows(token, ms) {
+    for (let waited = 0; waited < ms; waited += 250) {
+      if (token !== runToken) return null;
+      const rows = findTranscriptRows();
+      if (rows.length >= 3) return rows;
       await sleep(250);
     }
-    if (!findSegmentEls().length) return { ok: false, error: 'transcript panel had no segments' };
+    return null;
+  }
 
-    // Long transcripts load lazily as you scroll; scroll until the count stops growing.
-    let last = -1;
-    let stable = 0;
-    for (let i = 0; i < 60 && stable < 3; i++) {
-      const els = findSegmentEls();
-      if (els.length === last) stable++; else stable = 0;
-      last = els.length;
-      const scroller = scrollableAncestor(els[els.length - 1]);
-      if (scroller) scroller.scrollTop = scroller.scrollHeight;
-      await sleep(300);
+  function logTranscriptDiagnostics() {
+    const panels = [...document.querySelectorAll(PANEL_SEL)].map((p) => p.getAttribute('target-id'));
+    const leaves = [...document.querySelectorAll('body *')]
+      .filter((el) => !el.children.length && TS_RE.test((el.textContent || '').trim())).length;
+    console.warn(LOG, 'Transcript panel diagnostics (please screenshot this for debugging):', {
+      engagementPanels: panels,
+      transcriptButtons: transcriptButtons().map((b) => `${b.tagName.toLowerCase()}: ${(b.getAttribute('aria-label') || b.textContent || '').trim().slice(0, 40)}`),
+      timestampLikeElements: leaves,
+      transcriptRowsFound: findTranscriptRows().length
+    });
+  }
+
+  async function scrapeTranscriptPanel(token) {
+    let openedByUs = false;
+    let rows = findTranscriptRows();
+    if (rows.length < 3) {
+      // The transcript button lives in the expanded description; the Transcript
+      // tab lives in the "In this video" panel. Try each candidate in turn.
+      document.querySelector('ytd-text-inline-expander #expand, #description-inline-expander #expand')?.click();
+      await sleep(500);
+      for (const btn of transcriptButtons()) {
+        btn.click();
+        openedByUs = true;
+        rows = await waitForRows(token, 3000);
+        if (token !== runToken) return { ok: false, error: 'cancelled' };
+        if (rows) break;
+      }
+    }
+    if (!rows || rows.length < 3) {
+      logTranscriptDiagnostics();
+      return { ok: false, error: 'could not find the transcript panel' };
     }
 
-    const raw = findSegmentEls().map(readSegment).filter(Boolean);
+    // Long transcripts load lazily (and may drop rows that scroll out of view),
+    // so collect rows while scrolling until no new ones appear.
+    const collected = new Map();
+    const add = (list) => list.forEach((r) => collected.set(`${r.start}|${r.text}`, r));
+    add(rows);
+    // Scroll down a bit at a time, waiting for the list to redraw after each
+    // step. Some lists only keep the visible rows on the page, so jumping too
+    // far (or reading before it redraws) would silently skip rows.
+    const scroller = scrollableAncestor(rows[rows.length - 1].el);
+    // If every row is already on the page (rows reach from the top of the list
+    // to the bottom), there's nothing to scroll for — just check once whether
+    // more rows load when scrolled to the bottom.
+    const fullyRendered = () => {
+      if (!scroller) return true;
+      const box = scroller.getBoundingClientRect();
+      const all = findTranscriptRows();
+      const first = all[0]?.el.getBoundingClientRect();
+      const last = all[all.length - 1]?.el.getBoundingClientRect();
+      if (!first || !last) return true;
+      const rowH = Math.max(10, last.height);
+      const topOk = first.top - (box.top - scroller.scrollTop) <= rowH * 2;
+      const bottomOk = (box.top - scroller.scrollTop + scroller.scrollHeight) - last.bottom <= rowH * 3;
+      return topOk && bottomOk;
+    };
+    if (scroller && fullyRendered()) {
+      for (let i = 0; i < 50; i++) {
+        const before = collected.size;
+        scroller.scrollTop = scroller.scrollHeight;
+        await sleep(800);
+        add(findTranscriptRows());
+        if (collected.size === before) break;
+      }
+    } else if (scroller) {
+      const keysOf = (list) => new Set(list.map((r) => `${r.start}|${r.text}`));
+      scroller.scrollTop = 0;
+      await sleep(300);
+      let previous = findTranscriptRows();
+      add(previous);
+      let stableAtBottom = 0;
+      for (let i = 0; i < 2000 && stableAtBottom < 3; i++) {
+        if (token !== runToken) return { ok: false, error: 'cancelled' };
+        const step = Math.max(40, scroller.clientHeight * 0.5);
+        const prevKeys = keysOf(previous);
+        const topBefore = scroller.scrollTop;
+        scroller.scrollTop = topBefore + step;
+        // Wait (up to ~1.5s) for rows that weren't there before.
+        let current = previous;
+        for (let w = 0; w < 15; w++) {
+          await sleep(100);
+          current = findTranscriptRows();
+          if (current.some((r) => !prevKeys.has(`${r.start}|${r.text}`))) break;
+        }
+        const overlaps = current.some((r) => prevKeys.has(`${r.start}|${r.text}`));
+        if (!overlaps && current.length && previous.length && step > 41) {
+          // The list jumped past rows we never saw — go back half a step.
+          scroller.scrollTop = topBefore + step / 4;
+          await sleep(300);
+          current = findTranscriptRows();
+        }
+        const before = collected.size;
+        add(current);
+        previous = current;
+        const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2;
+        stableAtBottom = atBottom && collected.size === before ? stableAtBottom + 1 : 0;
+      }
+    }
+
+    const raw = [...collected.values()].sort((a, b) => a.start - b.start);
     const segments = raw.map((s, i) => ({
       start: s.start,
       dur: i + 1 < raw.length ? Math.max(0, raw[i + 1].start - s.start) : 5,
@@ -143,12 +256,10 @@
     }));
 
     if (openedByUs) {
-      const panel = document.querySelector(PANEL_SEL);
+      const panel = rows[0].el.closest(PANEL_SEL);
       panel?.querySelector('#visibility-button button, button[aria-label*="close" i]')?.click();
     }
-    return segments.length
-      ? { ok: true, method: 'transcript-panel', segments }
-      : { ok: false, error: 'could not read transcript segments' };
+    return { ok: true, method: 'transcript-panel', segments };
   }
 
   // ---- Main flow ----
@@ -171,13 +282,12 @@
       Overlay.setStatus('Live streams aren’t supported');
       return;
     }
-    if (!result.ok && result.reason === 'no_captions') {
-      console.warn(LOG, 'No captions available');
-      Overlay.setStatus('No captions available');
-      return;
-    }
     if (!result.ok) {
-      console.warn(LOG, `Primary caption method failed (${result.error}). Trying the transcript panel…`);
+      // The player's caption list can be empty even when YouTube shows a
+      // transcript, so always try the transcript panel before giving up.
+      console.warn(LOG, result.reason === 'no_captions'
+        ? 'The player lists no caption tracks. Trying the transcript panel…'
+        : `Primary caption method failed (${result.error}). Trying the transcript panel…`);
       const fallback = await scrapeTranscriptPanel(token);
       if (token !== runToken) return;
       if (!fallback.ok) {
@@ -186,7 +296,7 @@
         Overlay.setStatus('No captions available');
         return;
       }
-      result = { ...fallback, track: result.track };
+      result = { ...fallback, track: result.track, meta: result.meta };
     }
 
     const t = result.track;
@@ -199,68 +309,79 @@
     console.groupEnd();
     console.log(LOG, 'Raw segments:', result.segments);
 
-    Overlay.setStatus('Finding claims…');
+    Overlay.setStatus('Checking ahead…');
     chrome.runtime.sendMessage({
       type: 'TRANSCRIPT',
       videoId,
-      title: t?.videoTitle || document.title.replace(/ - YouTube$/, ''),
-      channel: t?.channel || '',
-      published: t?.published || '',
+      title: result.meta?.videoTitle || t?.videoTitle || document.title.replace(/ - YouTube$/, ''),
+      channel: result.meta?.channel || t?.channel || '',
+      published: result.meta?.published || t?.published || '',
       playhead: document.querySelector('#movie_player video')?.currentTime || 0,
+      rate: document.querySelector('#movie_player video')?.playbackRate || 1,
       segments: result.segments
     }).catch(() => {});
   }
 
   // ---- Updates from the background worker ----
   function statusFromState(state) {
-    const n = state.claims.length;
-    const checked = state.checked || 0;
+    const resolved = state.claims.filter((c) => ['done', 'error', 'skipped'].includes(c.status)).length;
+    const searched = state.claims.filter((c) => c.status === 'done' || c.status === 'error').length;
     const falseCount = state.claims.filter((c) => c.verdict === 'FALSE').length;
-    const falses = `${falseCount} false`;
-    if (state.status === 'error') {
-      return checked ? `${state.error} · ${checked} checked · ${falses}` : `Error: ${state.error}`;
-    }
-    if (state.status === 'done') {
-      return n ? `Done · ${checked} claim${checked === 1 ? '' : 's'} checked · ${falses}`
-        : 'Done · no checkable claims found';
-    }
-    const scanning = state.chunksDone < state.chunksTotal
-      ? ` · scanned ${state.chunksDone}/${state.chunksTotal} sections` : '';
-    const progress = `Checking ahead… ${checked} of ${n} claims checked · ${falses}${scanning}`;
+    const counts = resolved
+      ? `${resolved} claim${resolved === 1 ? '' : 's'} checked · ${searched} searched · ${falseCount} false`
+      : 'no checkable claims yet';
+    if (state.status === 'error') return `${state.error} · ${counts}`;
+    if (state.status === 'done') return `Done · ${counts}`;
+    if (state.status === 'idle') return `Up to date · ${counts}`;
+    const progress = `Checking ahead… ${counts}`;
     return state.note ? `${progress} · ${state.note}` : progress;
   }
 
-  // Tell the background where the viewer is, so it checks what's coming up next.
+  // Tell the background where the viewer is listening, so it checks only the
+  // next couple of minutes. Nothing is sent while paused, so no work happens.
   function sendPlayhead() {
     const v = document.querySelector('#movie_player video');
     if (!currentVideoId || !v) return;
-    chrome.runtime.sendMessage({ type: 'PLAYHEAD', time: v.currentTime }).catch(() => {});
+    try {
+      chrome.runtime.sendMessage({
+        type: 'PLAYHEAD', videoId: currentVideoId, time: v.currentTime, rate: v.playbackRate || 1
+      }).catch(() => {});
+    } catch (_) { /* extension was reloaded; this page's script is orphaned */ }
   }
-  document.addEventListener('seeked', sendPlayhead, true);
+  for (const ev of ['seeked', 'play', 'ratechange']) document.addEventListener(ev, sendPlayhead, true);
   setInterval(() => {
     const v = document.querySelector('#movie_player video');
     if (v && !v.paused) sendPlayhead();
-  }, 15000);
+  }, 5000);
 
-  let loggedClaimsFor = null;
+  // Leaving YouTube (or reloading) in this tab stops the work for this video.
+  window.addEventListener('pagehide', () => {
+    if (!currentVideoId) return;
+    try { chrome.runtime.sendMessage({ type: 'LEFT_VIDEO' }).catch(() => {}); } catch (_) {}
+  });
+
+  // Print each verdict in the console as it arrives (only FALSE shows on the video).
+  const loggedVerdicts = new Set();
+  function logNewVerdicts(state) {
+    for (const c of state.claims) {
+      const key = `${state.videoId}:${c.id}`;
+      if (loggedVerdicts.has(key) || !['done', 'error', 'skipped'].includes(c.status)) continue;
+      loggedVerdicts.add(key);
+      const label = c.status === 'skipped' ? `NOT SEARCHED (judged likely true: ${c.triageReason || 'no reason'})`
+        : c.status === 'error' ? `ERROR (${c.error})` : c.verdict;
+      console.info(LOG, `${fmtTime(c.t)} ${label}\n  Claim: ${c.claim}\n  Speaker: "${c.quote}"` +
+        (c.explanation ? `\n  Why: ${c.explanation}` : '') +
+        (c.evidenceQuote ? `\n  Source says: "${c.evidenceQuote}"` : '') +
+        (c.sourceUrl ? `\n  Source: ${c.sourceUrl}` : ''));
+    }
+  }
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg?.type !== 'STATE' || msg.state?.videoId !== currentVideoId) return;
     Overlay.setStatus(statusFromState(msg.state));
     // Only FALSE claims are shown on the video.
     Overlay.setClaims(msg.state.claims.filter((c) => c.verdict === 'FALSE'));
-    if (msg.state.status === 'done' && loggedClaimsFor !== currentVideoId) {
-      loggedClaimsFor = currentVideoId;
-      console.info(LOG, `All ${msg.state.claims.length} checked claims (only FALSE ones appear on the video):`);
-      console.table(msg.state.claims.map((c) => ({
-        time: fmtTime(c.t),
-        verdict: c.verdict || c.status,
-        claim: c.claim,
-        explanation: c.explanation || c.error || '',
-        evidence: c.evidenceQuote || '',
-        source: c.sourceUrl || ''
-      })));
-    }
+    logNewVerdicts(msg.state);
   });
 
   function onNavigate() {

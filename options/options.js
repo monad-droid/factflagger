@@ -53,6 +53,69 @@ async function testTavily() {
   setStatus(`Tavily key works.${usage}`, 'ok');
 }
 
+// ---- Free budget meter ----
+function meter(label, left, total, detail) {
+  const wrap = document.createElement('div');
+  wrap.className = 'meter';
+  const row = document.createElement('div');
+  row.className = 'meter-label';
+  const a = document.createElement('span');
+  a.textContent = label;
+  const b = document.createElement('span');
+  b.textContent = detail;
+  row.append(a, b);
+  wrap.appendChild(row);
+  if (Number.isFinite(left) && Number.isFinite(total) && total > 0) {
+    const bar = document.createElement('div');
+    bar.className = 'meter-bar';
+    const fill = document.createElement('div');
+    const frac = Math.max(0, Math.min(1, left / total));
+    fill.className = `meter-fill${frac < 0.1 ? ' low' : ''}`;
+    fill.style.width = `${frac * 100}%`;
+    bar.appendChild(fill);
+    wrap.appendChild(bar);
+  }
+  return wrap;
+}
+
+const fmt = (n) => Number(n).toLocaleString();
+
+async function loadBudget() {
+  const box = $('budget');
+  const s = { ...D, ...(await chrome.storage.local.get(Object.keys(D))) };
+  const { budget } = (await chrome.runtime.sendMessage({ type: 'GET_BUDGET' })) || {};
+  box.textContent = '';
+
+  const t = budget?.tavily;
+  if (t && t.used !== null && t.limit !== null) {
+    const left = Math.max(0, t.limit - t.used - (t.searchesSinceRefresh || 0));
+    box.appendChild(meter('Tavily searches left this month', left, t.limit,
+      `${fmt(left)} of ${fmt(t.limit)}`));
+  } else {
+    box.appendChild(meter('Tavily searches left this month', NaN, NaN,
+      s.tavilyApiKey ? 'unknown — click Test Tavily key' : 'add a Tavily key'));
+  }
+
+  const models = [
+    ['Claim-finding model', s.detectionModel],
+    ['Verdict model', s.verdictModel]
+  ];
+  for (const [role, model] of models) {
+    const m = budget?.groq?.[model];
+    if (!m) {
+      box.appendChild(meter(`${role} (${model})`, NaN, NaN, 'not used yet today'));
+      continue;
+    }
+    if (Number.isFinite(m.requestsLeftToday) && Number.isFinite(m.requestsPerDay)) {
+      box.appendChild(meter(`${role} — requests left today`, m.requestsLeftToday, m.requestsPerDay,
+        `${fmt(m.requestsLeftToday)} of ${fmt(m.requestsPerDay)}`));
+    }
+    const limit = m.tokensPerDayDocumented || 200000;
+    box.appendChild(meter(`${role} — tokens left today (estimate)`, limit - m.tokens, limit,
+      `~${fmt(Math.max(0, limit - m.tokens))} of ${fmt(limit)} · ${fmt(m.requests)} requests by FactFlag`));
+  }
+}
+
 document.querySelectorAll('button.show').forEach((b) => {
   b.addEventListener('click', () => {
     const input = $(b.dataset.for);
@@ -63,7 +126,9 @@ document.querySelectorAll('button.show').forEach((b) => {
 });
 $('save').addEventListener('click', save);
 $('testGroq').addEventListener('click', testGroq);
-$('testTavily').addEventListener('click', testTavily);
+$('testTavily').addEventListener('click', () => testTavily().then(loadBudget));
+$('refreshBudget').addEventListener('click', loadBudget);
+loadBudget();
 $('resetModels').addEventListener('click', () => {
   $('detectionModel').value = D.detectionModel;
   $('verdictModel').value = D.verdictModel;

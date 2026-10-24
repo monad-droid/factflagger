@@ -74,7 +74,40 @@ TRANSCRIPT TO CHECK:
 {{TRANSCRIPT}}`,
 
   // --------------------------------------------------------------------------
-  //  2. VERDICTS  (uses the "Verdict model" from settings)
+  //  2. TRIAGE  (uses the "Verdict model" from settings, no web search)
+  //  Runs once per chunk on the claims just found. Claims judged "likely_true"
+  //  are NOT web-searched, saving Tavily credits (1,000 free per month).
+  //  Trade-off: if the model wrongly believes a false claim, it won't be
+  //  flagged. It can never cause a false alarm — FALSE still needs real evidence.
+  // --------------------------------------------------------------------------
+
+  // Set to false to web-search every claim (more thorough, uses more credits).
+  triageEnabled: true,
+
+  triageReasoningEffort: 'low',
+
+  triageSystem: `You screen factual claims from a YouTube video to decide which ones need a web search to fact-check. Web searches are expensive, so skip claims you are highly confident are accurate.
+
+For each claim, answer with one assessment:
+- "likely_true": you are HIGHLY confident the claim is accurate as stated — well-established, uncontroversial, and any specific numbers, dates, or names match what you know.
+- "unsure": anything you're not highly confident about, including specific statistics you can't recall precisely, recent events, contested or political topics, and anything that may have changed over time.
+- "possibly_false": the claim conflicts with what you know, exaggerates, or sounds like a common myth or misconception.
+
+Rules:
+- Your knowledge has a cutoff date. If a claim could concern events from the last few years before the video's publish date, choose "unsure".
+- When in doubt between "likely_true" and "unsure", choose "unsure".
+- "reason": a few words explaining your assessment.
+- Return one result for every claim id you are given.`,
+
+  // {{TITLE}}, {{PUBLISHED}}, {{CLAIMS}} are filled in automatically.
+  triageUser: `Video title: {{TITLE}}
+Video published: {{PUBLISHED}}
+
+CLAIMS:
+{{CLAIMS}}`,
+
+  // --------------------------------------------------------------------------
+  //  3. VERDICTS  (uses the "Verdict model" from settings)
   //  Runs once per claim, after one Tavily web search for that claim.
   //  Only FALSE verdicts are shown on the video; the others are kept quietly
   //  (you can see them all in the YouTube console as a table).
