@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>FactFlag Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <h1>FactFlag settings</h1>
+    <p class="note">Keys are stored only in this browser (chrome.storage.local) and are sent only to Groq and Tavily.</p>
+
+    <label class="toggle">
+      <input type="checkbox" id="enabled"> FactFlag is on
+    </label>
+
+    <label for="groqApiKey">Groq API key</label>
+    <div class="row">
+      <input type="password" id="groqApiKey" autocomplete="off" spellcheck="false" placeholder="gsk_…">
+      <button type="button" class="show" data-for="groqApiKey">Show</button>
+    </div>
+
+    <label for="detectionModel">Claim-detection model (fast)</label>
+    <input type="text" id="detectionModel" spellcheck="false">
+
+    <label for="verdictModel">Verdict model (stronger)</label>
+    <input type="text" id="verdictModel" spellcheck="false">
+
+    <label for="tavilyApiKey">Tavily API key</label>
+    <div class="row">
+      <input type="password" id="tavilyApiKey" autocomplete="off" spellcheck="false" placeholder="tvly-…">
+      <button type="button" class="show" data-for="tavilyApiKey">Show</button>
+    </div>
+
+    <div class="actions">
+      <button type="button" id="save">Save</button>
+      <button type="button" id="testGroq">Test Groq key &amp; models</button>
+      <button type="button" id="resetModels">Reset models to defaults</button>
+    </div>
+    <p id="status" role="status"></p>
+    <pre id="details" hidden></pre>
+  </main>
+  <script src="../shared/defaults.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
