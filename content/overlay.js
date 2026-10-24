@@ -34,17 +34,19 @@ self.FactFlagOverlay = (() => {
   function hideTip() {
     tipEl?.remove();
     tipEl = null;
+    player()?.classList.remove('factflag-hovering');
   }
 
   function showTip(markerEl, claim) {
     const p = player();
     if (!p) return;
     hideTip();
+    p.classList.add('factflag-hovering');
     tipEl = document.createElement('div');
     tipEl.className = 'factflag-tip';
     const head = document.createElement('div');
     head.className = 'factflag-tip-head';
-    head.textContent = `${fmtTime(claim.t)} · NOT CHECKED YET`;
+    head.textContent = `${fmtTime(claim.t)} · CANDIDATE · NOT FACT-CHECKED YET`;
     const body = document.createElement('div');
     body.textContent = claim.claim;
     tipEl.append(head, body);

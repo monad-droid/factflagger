@@ -213,10 +213,10 @@
   // ---- Updates from the background worker ----
   function statusFromState(state) {
     const n = state.claims.length;
-    const found = `${n} claim${n === 1 ? '' : 's'} found`;
+    const found = `${n} candidate${n === 1 ? '' : 's'} to fact-check`;
     if (state.status === 'error') return `Error: ${state.error}`;
     if (state.status === 'done') return `Scan complete · ${found}`;
-    const progress = `Finding claims… ${state.chunksDone}/${state.chunksTotal} sections · ${found}`;
+    const progress = `Finding checkable claims… ${state.chunksDone}/${state.chunksTotal} sections · ${found}`;
     return state.note ? `${progress} · ${state.note}` : progress;
   }
 

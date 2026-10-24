@@ -52,15 +52,19 @@ Output rules:
 - The transcript may come from auto-generated captions with no punctuation and some misheard words. Interpret sensibly.
 - "claim": rewrite as ONE self-contained sentence that makes sense on its own. Replace pronouns ("he", "it", "this") with what they refer to. Keep the specific numbers, names, and dates.
 - "quote": the speaker's exact words, copied from the transcript (shorten with "..." if long).
-- "t": the number in square brackets on the line where the claim STARTS.
+- Read each sentence in full, together with the sentences around it, before deciding. A claim must be judged by what the speaker actually says in the complete sentence, not a fragment.
+- "t": the number in square brackets on the sentence where the claim STARTS.
 - At most {{MAX_CLAIMS}} claims. Never invent claims that are not in the transcript.`,
 
-  // {{TITLE}}, {{CHANNEL}}, {{RANGE}}, {{TRANSCRIPT}} are filled in automatically.
+  // {{TITLE}}, {{CHANNEL}}, {{RANGE}}, {{CONTEXT}}, {{TRANSCRIPT}} are filled in automatically.
   claimDetectionUser: `Video title: {{TITLE}}
 Channel: {{CHANNEL}}
 This chunk covers {{RANGE}} of the video.
-Each line starts with [seconds from the start of the video].
+Each line is one sentence and starts with [seconds from the start of the video].
 
-TRANSCRIPT:
+EARLIER IN THE VIDEO (context only — do NOT extract claims from these lines):
+{{CONTEXT}}
+
+TRANSCRIPT TO CHECK:
 {{TRANSCRIPT}}`
 };

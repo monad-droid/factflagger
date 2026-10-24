@@ -86,17 +86,64 @@ function fmtTime(sec) {
   return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
 }
 
+// Captions arrive as short on-screen fragments ("to do something productive,").
+// Join them back into whole sentences so the model judges complete statements.
+const SENTENCE_END = /[.!?…]["'”’)\]]*$/;
+const SOUND_TAG = /^[\[(][^\])]*[\])]$/;     // "(Laughter)", "[Applause]"
+const MAX_SENTENCE_WORDS = 45;               // safety cap for unpunctuated auto-captions
+const MAX_SENTENCE_SECONDS = 30;
+const PAUSE_SPLIT_SECONDS = 1.2;             // only used when captions have no punctuation
+const CONTEXT_SENTENCES = 4;                 // earlier sentences shown to the model for context
+
+function buildSentences(segments) {
+  const punctuated = segments.filter((s) => /[.!?]["'”’)\]]*$/.test(s.text)).length;
+  const hasPunctuation = punctuated / Math.max(segments.length, 1) > 0.1;
+  const sentences = [];
+  let cur = null;
+  const flush = () => { if (cur) sentences.push(cur); cur = null; };
+
+  for (const seg of segments) {
+    const segEnd = seg.start + (seg.dur || 0);
+    if (SOUND_TAG.test(seg.text)) {
+      flush();
+      sentences.push({ start: seg.start, end: segEnd, text: seg.text });
+      continue;
+    }
+    if (cur && !hasPunctuation && seg.start - cur.end > PAUSE_SPLIT_SECONDS) flush();
+    if (!cur) {
+      cur = { start: seg.start, end: segEnd, text: seg.text };
+    } else {
+      cur.text += ` ${seg.text}`;
+      cur.end = Math.max(cur.end, segEnd);
+    }
+    const words = cur.text.split(/\s+/).length;
+    if (SENTENCE_END.test(cur.text) || words >= MAX_SENTENCE_WORDS ||
+        cur.end - cur.start >= MAX_SENTENCE_SECONDS) {
+      flush();
+    }
+  }
+  flush();
+  return sentences;
+}
+
+// ~2-minute chunks that always end on a sentence boundary.
 function makeChunks(segments) {
+  const sentences = buildSentences(segments);
   const chunks = [];
   let cur = null;
-  for (const seg of segments) {
-    if (!cur || seg.start - cur.start >= CHUNK_SECONDS) {
-      cur = { start: seg.start, end: seg.start, segments: [] };
+  sentences.forEach((sent, i) => {
+    if (!cur || sent.start - cur.start >= CHUNK_SECONDS) {
+      cur = {
+        start: sent.start,
+        end: sent.end,
+        sentences: [],
+        context: sentences.slice(Math.max(0, i - CONTEXT_SENTENCES), i)
+      };
       chunks.push(cur);
     }
-    cur.segments.push(seg);
-    cur.end = seg.start + (seg.dur || 0);
-  }
+    cur.sentences.push(sent);
+    cur.end = Math.max(cur.end, sent.end);
+  });
   return chunks;
 }
 
@@ -138,7 +185,9 @@ function fill(template, values) {
 
 async function detectClaimsInChunk(chunk, meta, settings, onWait) {
   const P = self.FACTFLAG_PROMPTS;
-  const transcript = chunk.segments.map((s) => `[${Math.floor(s.start)}] ${s.text}`).join('\n');
+  const asLines = (list) => list.map((s) => `[${Math.floor(s.start)}] ${s.text}`).join('\n');
+  const transcript = asLines(chunk.sentences);
+  const context = chunk.context.length ? asLines(chunk.context) : '(start of video)';
   const { json, usage } = await groqChatJson({
     apiKey: settings.groqApiKey,
     model: settings.detectionModel,
@@ -147,6 +196,7 @@ async function detectClaimsInChunk(chunk, meta, settings, onWait) {
       TITLE: meta.title || 'unknown',
       CHANNEL: meta.channel || 'unknown',
       RANGE: `${fmtTime(chunk.start)}–${fmtTime(chunk.end)}`,
+      CONTEXT: context,
       TRANSCRIPT: transcript
     }),
     schemaName: 'claims',
@@ -161,18 +211,19 @@ async function detectClaimsInChunk(chunk, meta, settings, onWait) {
 
   const claims = Array.isArray(json.claims) ? json.claims : [];
   const valid = claims.filter((c) => c && typeof c.claim === 'string' && c.claim.trim());
-  const kept = valid.filter((c) => Number(c.checkworthiness) >= P.minCheckworthiness);
+  // Drop claims outside this chunk (e.g. taken from the context lines by mistake).
+  const inChunk = (c) => Number(c.t) >= Math.floor(chunk.start) && Number(c.t) <= chunk.end;
+  const kept = valid.filter((c) => inChunk(c) && Number(c.checkworthiness) >= P.minCheckworthiness);
   if (valid.length !== kept.length) {
-    console.info(LOG, `chunk ${fmtTime(chunk.start)}: dropped ${valid.length - kept.length} low-scoring claim(s)`);
+    console.info(LOG, `chunk ${fmtTime(chunk.start)}: dropped ${valid.length - kept.length} claim(s) (low score or outside this section)`);
   }
   return kept
     .sort((a, b) => b.checkworthiness - a.checkworthiness)
     .slice(0, P.maxClaimsPerChunk)
     .map((c) => {
-      // Snap the timestamp to the start of the transcript line it falls in.
-      let t = Number(c.t);
-      if (!Number.isFinite(t) || t < chunk.start || t > chunk.end) t = chunk.start;
-      const line = [...chunk.segments].reverse().find((s) => s.start <= t + 0.5) || chunk.segments[0];
+      // Snap the timestamp to the start of the sentence it falls in.
+      const t = Number(c.t);
+      const line = [...chunk.sentences].reverse().find((s) => s.start <= t + 0.5) || chunk.sentences[0];
       return {
         t: line.start,
         claim: c.claim.trim(),

@@ -22,7 +22,7 @@
 .factflag-marker::after {
   content: ''; position: absolute; left: 2px; bottom: 0;
   border-left: 6px solid transparent; border-right: 6px solid transparent;
-  border-top: 10px solid var(--ff-color, #fbc02d);
+  border-top: 10px solid var(--ff-color, rgba(220, 220, 220, 0.7));
   filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.9));
 }
 .factflag-marker:hover::after { border-top-width: 13px; }
@@ -37,3 +37,7 @@
 }
 .factflag-tip-head { font-size: 11px; font-weight: 700; letter-spacing: 0.03em; opacity: 0.8; margin-bottom: 2px; }
 .factflag-tip-quote { margin-top: 4px; font-size: 12px; font-style: italic; opacity: 0.75; }
+
+/* While hovering one of our markers, hide YouTube's own preview thumbnail and
+   chapter title so they don't overlap our card. */
+#movie_player.factflag-hovering .ytp-tooltip { display: none !important; }
