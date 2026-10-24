@@ -378,6 +378,9 @@
 
   // ---- Pop-up alert when playback reaches a FALSE claim ----
   const LATE_ALERT_SECONDS = 15; // verdict arrived just after the claim was said
+  const AFTER_SENTENCE_SECONDS = 0.5; // small pause after the speaker finishes
+  // The card appears right after the claim has been fully said.
+  const alertAt = (c) => (Number.isFinite(c.tEnd) ? c.tEnd : c.t) + AFTER_SENTENCE_SECONDS;
   let falseClaims = [];
   const alerted = new Set();     // claim ids alerted during this viewing
   const knownFalse = new Set();  // claim ids already known to be FALSE
@@ -400,14 +403,14 @@
     if (prev === null) { playedFrom = now; return; }
     // Seeking backwards: allow claims ahead of the new position to alert again.
     if (now < prev - 1) {
-      for (const c of falseClaims) if (c.t > now) alerted.delete(c.id);
+      for (const c of falseClaims) if (alertAt(c) > now) alerted.delete(c.id);
       playedFrom = now;
       return;
     }
     // Only normal playback counts — skipping past a claim doesn't trigger it.
     if (now - prev > 3) { playedFrom = now; return; }
     for (const c of falseClaims) {
-      if (!alerted.has(c.id) && c.t > prev && c.t <= now) {
+      if (!alerted.has(c.id) && alertAt(c) > prev && alertAt(c) <= now) {
         alerted.add(c.id);
         Overlay.alert(c);
       }
@@ -431,7 +434,8 @@
     if (v && !v.paused && !adPlaying()) {
       for (const c of justArrived) {
         const heard = playedFrom !== null && c.t >= playedFrom; // played through it since the last skip
-        if (heard && !alerted.has(c.id) && v.currentTime >= c.t && v.currentTime - c.t <= LATE_ALERT_SECONDS) {
+        if (heard && !alerted.has(c.id) && v.currentTime >= alertAt(c) &&
+            v.currentTime - alertAt(c) <= LATE_ALERT_SECONDS) {
           alerted.add(c.id);
           Overlay.alert(c);
         }

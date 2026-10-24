@@ -89,6 +89,11 @@ function buildSentences(segments) {
     }
   }
   flush();
+  // Caption durations (especially auto-generated ones) often overlap the next
+  // line, so a sentence ends no later than the next one starts.
+  for (let i = 0; i + 1 < sentences.length; i++) {
+    sentences[i].end = Math.max(sentences[i].start, Math.min(sentences[i].end, sentences[i + 1].start));
+  }
   return sentences;
 }
 
@@ -138,6 +143,20 @@ const CLAIMS_SCHEMA = {
 
 function fill(template, values) {
   return template.replace(/\{\{(\w+)\}\}/g, (_, k) => (k in values ? String(values[k]) : ''));
+}
+
+// When the claim has been fully said: the end of the sentence it starts in, or
+// of later sentences too if the speaker's quoted words run longer than that.
+function claimEnd(chunk, firstSentence, quote) {
+  const quoteWords = String(quote || '').split(/\s+/).filter((w) => w && w !== '...' && w !== '…').length;
+  const i = chunk.sentences.indexOf(firstSentence);
+  let end = firstSentence.end;
+  let words = firstSentence.text.split(/\s+/).length;
+  for (let j = i + 1; j < chunk.sentences.length && words < quoteWords; j++) {
+    end = chunk.sentences[j].end;
+    words += chunk.sentences[j].text.split(/\s+/).length;
+  }
+  return end;
 }
 
 // `concepts` is the running list of the speaker's own metaphors/characters
@@ -199,6 +218,7 @@ async function detectClaimsInChunk(chunk, meta, settings, concepts, onWait) {
       const line = [...chunk.sentences].reverse().find((s) => s.start <= t + 0.5) || chunk.sentences[0];
       return {
         t: line.start,
+        tEnd: claimEnd(chunk, line, c.quote),
         claim: c.claim.trim(),
         quote: (c.quote || '').trim(),
         checkworthiness: Number(c.checkworthiness)
