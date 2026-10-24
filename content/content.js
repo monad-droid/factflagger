@@ -4,6 +4,7 @@
   const FROM_CS = 'factflag-cs';
   const FROM_PAGE = 'factflag-page';
   const LOG = '[FactFlag]';
+  const Overlay = self.FactFlagOverlay;
 
   let runToken = 0;       // bumps on each new video so stale work is ignored
   let currentVideoId = null;
@@ -153,22 +154,26 @@
   // ---- Main flow ----
   async function handleVideo(videoId) {
     const token = ++runToken;
+    Overlay.clear();
     const settings = await getSettings();
     if (!settings.enabled) {
       console.info(LOG, 'FactFlag is turned off in settings.');
       return;
     }
     console.info(LOG, `Getting captions for video ${videoId}…`);
+    Overlay.setStatus('Getting captions…');
 
     let result = await requestCaptionsFromPage(videoId);
     if (token !== runToken) return;
 
     if (!result.ok && result.reason === 'live') {
       console.warn(LOG, 'This is a live stream — not supported in v1.');
+      Overlay.setStatus('Live streams aren’t supported');
       return;
     }
     if (!result.ok && result.reason === 'no_captions') {
       console.warn(LOG, 'No captions available');
+      Overlay.setStatus('No captions available');
       return;
     }
     if (!result.ok) {
@@ -178,6 +183,7 @@
       if (!fallback.ok) {
         console.error(LOG, `Transcript panel fallback also failed (${fallback.error}).`);
         console.warn(LOG, 'No captions available');
+        Overlay.setStatus('No captions available');
         return;
       }
       result = { ...fallback, track: result.track };
@@ -192,13 +198,40 @@
     console.log(lines.join('\n'));
     console.groupEnd();
     console.log(LOG, 'Raw segments:', result.segments);
+
+    Overlay.setStatus('Finding claims…');
+    chrome.runtime.sendMessage({
+      type: 'TRANSCRIPT',
+      videoId,
+      title: t?.videoTitle || document.title.replace(/ - YouTube$/, ''),
+      channel: t?.channel || '',
+      playhead: document.querySelector('#movie_player video')?.currentTime || 0,
+      segments: result.segments
+    }).catch(() => {});
   }
+
+  // ---- Updates from the background worker ----
+  function statusFromState(state) {
+    const n = state.claims.length;
+    const found = `${n} claim${n === 1 ? '' : 's'} found`;
+    if (state.status === 'error') return `Error: ${state.error}`;
+    if (state.status === 'done') return `Scan complete · ${found}`;
+    const progress = `Finding claims… ${state.chunksDone}/${state.chunksTotal} sections · ${found}`;
+    return state.note ? `${progress} · ${state.note}` : progress;
+  }
+
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg?.type !== 'STATE' || msg.state?.videoId !== currentVideoId) return;
+    Overlay.setStatus(statusFromState(msg.state));
+    Overlay.setClaims(msg.state.claims);
+  });
 
   function onNavigate() {
     const videoId = videoIdFromUrl();
     if (videoId === currentVideoId) return;
+    if (currentVideoId) chrome.runtime.sendMessage({ type: 'LEFT_VIDEO' }).catch(() => {});
     currentVideoId = videoId;
-    if (!videoId) { runToken++; return; }
+    if (!videoId) { runToken++; Overlay.clear(); return; }
     handleVideo(videoId);
   }
 

@@ -2,7 +2,11 @@
 
 A Brave/Chrome extension (Manifest V3) that fact-checks YouTube videos and flags false claims at the moment they're said. Personal use, loaded unpacked — no server, no Web Store.
 
-**Status: Phase 1** — extension loads, settings page saves keys, captions are pulled and printed to the console.
+**Status: Phase 2** — finds checkable claims in the transcript and marks each one with a yellow triangle on the video's progress bar. Hover a triangle to read the claim; click it to jump there. Verdicts come in Phase 3.
+
+## Tweaking the AI prompts
+
+All prompts live in **`prompts.js`**. Edit it in any text editor, then reload the extension (see below). It also holds two easy knobs: the most claims kept per 2-minute chunk, and how hard the model "thinks".
 
 ## Install in Brave (one time)
 
@@ -10,7 +14,7 @@ A Brave/Chrome extension (Manifest V3) that fact-checks YouTube videos and flags
 2. In Brave, type `brave://extensions` in the address bar and press Enter.
 3. Turn on **Developer mode** (toggle, top-right).
 4. Click **Load unpacked** and pick the `factflagger` folder (the one that contains `manifest.json`).
-5. The FactFlag settings page opens automatically. Click the puzzle-piece icon in the toolbar and pin FactFlag if you want quick access — clicking it opens settings for now.
+5. The FactFlag settings page opens automatically. Click the puzzle-piece icon in the toolbar and pin FactFlag if you want quick access — clicking it opens settings.
 
 **After you get new code** (e.g. after each phase): go to `brave://extensions` and click the circular **reload** arrow on the FactFlag card, then **reload any open YouTube tabs**. YouTube tabs that were open before the reload won't have the new code.
 

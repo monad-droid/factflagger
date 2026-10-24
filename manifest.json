@@ -3,8 +3,12 @@
   "name": "FactFlag",
   "version": "0.1.0",
   "description": "Fact-checks YouTube videos and flags false claims at the moment they're said.",
-  "permissions": ["storage"],
-  "host_permissions": ["https://api.groq.com/*"],
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://api.groq.com/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
@@ -17,15 +21,28 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.youtube.com/*"],
-      "js": ["content/page-bridge.js"],
+      "matches": [
+        "https://www.youtube.com/*"
+      ],
+      "js": [
+        "content/page-bridge.js"
+      ],
       "run_at": "document_start",
       "world": "MAIN"
     },
     {
-      "matches": ["https://www.youtube.com/*"],
-      "js": ["shared/defaults.js", "content/content.js"],
-      "run_at": "document_idle"
+      "matches": [
+        "https://www.youtube.com/*"
+      ],
+      "js": [
+        "shared/defaults.js",
+        "content/overlay.js",
+        "content/content.js"
+      ],
+      "run_at": "document_idle",
+      "css": [
+        "content/overlay.css"
+      ]
     }
   ]
 }
