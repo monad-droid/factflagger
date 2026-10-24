@@ -1,6 +1,6 @@
 // FactFlag background service worker.
 // All calls to outside APIs (Groq, Tavily) happen here, never in the content script.
-importScripts('shared/defaults.js', 'prompts.js', 'lib/groq.js');
+importScripts('shared/defaults.js', 'prompts.js', 'lib/groq.js', 'lib/tavily.js');
 
 const GROQ_BASE = 'https://api.groq.com/openai/v1';
 const CHUNK_SECONDS = 120;
@@ -50,7 +50,7 @@ async function testGroq() {
 // ---------------------------------------------------------------------------
 const videoKey = (videoId) => `video:${videoId}`;
 const tabsWatching = new Map(); // tabId -> videoId
-const jobs = new Map();         // videoId -> { cancelled }
+const jobs = new Map();         // videoId -> { cancelled, playhead, ... }
 
 async function loadState(videoId) {
   return (await chrome.storage.session.get(videoKey(videoId)))[videoKey(videoId)] || null;
@@ -147,14 +147,18 @@ function makeChunks(segments) {
   return chunks;
 }
 
-// Work outward from the viewer: the chunk they're in first, then forward, then earlier.
-function chunkOrder(chunks, playhead) {
-  let first = chunks.findIndex((c) => playhead < c.end);
-  if (first === -1) first = 0;
-  const order = [];
-  for (let i = first; i < chunks.length; i++) order.push(i);
-  for (let i = 0; i < first; i++) order.push(i);
-  return order;
+// Work outward from the viewer: whatever is at or just ahead of the playhead
+// first, moving forward; things already behind the playhead come last
+// (nearest first).
+function pickNearest(items, playhead, startOf, endOf) {
+  let best = null;
+  let bestRank = Infinity;
+  for (const it of items) {
+    const ahead = endOf(it) >= playhead;
+    const rank = ahead ? Math.max(0, startOf(it) - playhead) : 1e9 + (playhead - endOf(it));
+    if (rank < bestRank) { bestRank = rank; best = it; }
+  }
+  return best;
 }
 
 const CLAIMS_SCHEMA = {
@@ -233,8 +237,123 @@ async function detectClaimsInChunk(chunk, meta, settings, onWait) {
     });
 }
 
-async function runDetection(videoId, segments, meta, playhead) {
-  const job = { cancelled: false };
+const VERDICT_SCHEMA = {
+  type: 'object',
+  properties: {
+    verdict: { type: 'string', enum: ['TRUE', 'FALSE', 'MISLEADING', 'UNVERIFIABLE'] },
+    explanation: { type: 'string' },
+    source_url: { type: 'string' }
+  },
+  required: ['verdict', 'explanation', 'source_url'],
+  additionalProperties: false
+};
+
+async function verifyClaim(claim, meta, settings, onWait) {
+  const P = self.FACTFLAG_PROMPTS;
+  const results = await tavilySearch({
+    apiKey: settings.tavilyApiKey,
+    query: claim.claim,
+    maxResults: P.searchResultsPerClaim,
+    onWait
+  });
+  if (!results.length) {
+    return { verdict: 'UNVERIFIABLE', explanation: 'The web search returned no results.', sourceUrl: '', sourceTitle: '' };
+  }
+  const resultsText = results.map((r, i) =>
+    `[${i + 1}] ${r.title}\nURL: ${r.url}${r.published ? `\nPublished: ${r.published}` : ''}\n${r.content}`
+  ).join('\n\n');
+
+  const { json, usage } = await groqChatJson({
+    apiKey: settings.groqApiKey,
+    model: settings.verdictModel,
+    system: P.verdictSystem,
+    user: fill(P.verdictUser, {
+      TITLE: meta.title || 'unknown',
+      PUBLISHED: meta.published || 'unknown',
+      CLAIM: claim.claim,
+      QUOTE: claim.quote,
+      RESULTS: resultsText
+    }),
+    schemaName: 'verdict',
+    schema: VERDICT_SCHEMA,
+    reasoningEffort: P.verdictReasoningEffort,
+    onWait
+  });
+  if (usage) {
+    console.info(LOG, `verdict ${fmtTime(claim.t)}: ${usage.total_tokens} tokens ` +
+      `(prompt ${usage.prompt_tokens}, completion ${usage.completion_tokens})`);
+  }
+
+  let verdict = ['TRUE', 'FALSE', 'MISLEADING', 'UNVERIFIABLE'].includes(json.verdict) ? json.verdict : 'UNVERIFIABLE';
+  let explanation = String(json.explanation || '').trim();
+  // The source must be one of the search results — never a URL the model made up.
+  const source = results.find((r) => r.url === String(json.source_url || '').trim());
+  if (!source && verdict !== 'UNVERIFIABLE' && verdict !== 'TRUE') {
+    // A FALSE/MISLEADING verdict with no real source behind it isn't trustworthy.
+    console.info(LOG, `verdict ${fmtTime(claim.t)}: ${verdict} downgraded — source URL not in search results`);
+    verdict = 'UNVERIFIABLE';
+    explanation = `${explanation} (Downgraded: no matching source.)`.trim();
+  }
+  return { verdict, explanation, sourceUrl: source?.url || '', sourceTitle: source?.title || '' };
+}
+
+// Errors that should stop all checking for this video rather than skip one claim.
+function isFatal(e) {
+  return e?.fatal === true || e?.status === 401;
+}
+
+async function detectLoop(job, state, chunks, meta, settings) {
+  const pending = new Set(chunks);
+  let nextId = 1;
+  while (pending.size && !job.cancelled) {
+    const chunk = pickNearest(pending, job.playhead, (c) => c.start, (c) => c.end);
+    pending.delete(chunk);
+    const found = await detectClaimsInChunk(chunk, meta, settings, (secs) => {
+      state.note = `Groq rate limit — waiting ${secs}s`;
+      saveState(state);
+    });
+    if (job.cancelled) return;
+    for (const c of found) state.claims.push({ id: nextId++, status: 'pending', ...c });
+    state.claims.sort((a, b) => a.t - b.t);
+    state.chunksDone++;
+    state.note = '';
+    job.wake?.();
+    await saveState(state);
+  }
+}
+
+async function verifyLoop(job, state, meta, settings) {
+  while (!job.cancelled) {
+    const pending = state.claims.filter((c) => c.status === 'pending');
+    if (!pending.length) {
+      if (job.detectDone) return;
+      await new Promise((resolve) => { job.wake = resolve; });
+      job.wake = null;
+      continue;
+    }
+    const claim = pickNearest(pending, job.playhead, (c) => c.t, (c) => c.t);
+    claim.status = 'checking';
+    try {
+      const result = await verifyClaim(claim, meta, settings, (secs) => {
+        state.note = `rate limit — waiting ${secs}s`;
+        saveState(state);
+      });
+      if (job.cancelled) return;
+      Object.assign(claim, result, { status: 'done' });
+      console.info(LOG, `${fmtTime(claim.t)} ${claim.verdict}: ${claim.claim}`);
+    } catch (e) {
+      if (isFatal(e)) throw e;
+      console.warn(LOG, `Could not check claim at ${fmtTime(claim.t)}: ${e.message}`);
+      Object.assign(claim, { status: 'error', error: e.message });
+    }
+    state.checked = state.claims.filter((c) => c.status === 'done' || c.status === 'error').length;
+    state.note = '';
+    await saveState(state);
+  }
+}
+
+async function runVideo(videoId, segments, meta, playhead) {
+  const job = { cancelled: false, playhead, detectDone: false, wake: null };
   jobs.set(videoId, job);
   updateKeepAlive();
 
@@ -245,6 +364,7 @@ async function runDetection(videoId, segments, meta, playhead) {
     status: 'scanning',
     chunksTotal: chunks.length,
     chunksDone: 0,
+    checked: 0,
     claims: [],
     note: '',
     error: ''
@@ -254,26 +374,31 @@ async function runDetection(videoId, segments, meta, playhead) {
   try {
     const settings = await getSettings();
     if (!settings.groqApiKey) throw new Error('Add your Groq API key in FactFlag settings.');
+    if (!settings.tavilyApiKey) throw new Error('Add your Tavily API key in FactFlag settings.');
 
-    let nextId = 1;
-    for (const i of chunkOrder(chunks, playhead)) {
-      if (job.cancelled) return;
-      const found = await detectClaimsInChunk(chunks[i], meta, settings, (secs) => {
-        state.note = `Groq rate limit — waiting ${secs}s`;
-        saveState(state);
-      });
-      if (job.cancelled) return;
-      for (const c of found) state.claims.push({ id: nextId++, ...c });
-      state.claims.sort((a, b) => a.t - b.t);
-      state.chunksDone++;
-      state.note = '';
-      await saveState(state);
+    // Finding claims and checking them run side by side (they use different
+    // models, so they don't compete for the same rate limits).
+    const verifying = verifyLoop(job, state, meta, settings).catch((e) => {
+      job.fatalError = e;   // e.g. Tavily key rejected or monthly limit hit:
+      job.cancelled = true; // stop finding claims too, no point continuing
+    });
+    try {
+      await detectLoop(job, state, chunks, meta, settings);
+    } finally {
+      job.detectDone = true;
+      job.wake?.();
     }
+    await verifying;
+    if (job.fatalError) throw job.fatalError;
+    if (job.cancelled) return;
     state.status = 'done';
     await saveState(state);
-    console.info(LOG, `Scan complete for ${videoId}: ${state.claims.length} claims.`);
+    const falseCount = state.claims.filter((c) => c.verdict === 'FALSE').length;
+    console.info(LOG, `Finished ${videoId}: ${state.claims.length} claims checked, ${falseCount} false.`);
   } catch (e) {
-    console.error(LOG, `Claim detection failed for ${videoId}:`, e.message);
+    job.cancelled = true;
+    job.wake?.();
+    console.error(LOG, `Checking stopped for ${videoId}:`, e.message);
     state.status = 'error';
     state.error = e.message;
     state.note = '';
@@ -293,6 +418,7 @@ function releaseVideo(tabId) {
   const job = jobs.get(old);
   if (job) {
     job.cancelled = true;
+    job.wake?.();
     jobs.delete(old);
     // Clear the half-finished scan so it restarts cleanly next time.
     chrome.storage.session.remove(videoKey(old));
@@ -312,7 +438,12 @@ async function onTranscript(tabId, msg) {
     chrome.tabs.sendMessage(tabId, { type: 'STATE', state: existing }).catch(() => {});
     return;
   }
-  runDetection(msg.videoId, msg.segments, { title: msg.title, channel: msg.channel }, msg.playhead || 0);
+  runVideo(
+    msg.videoId,
+    msg.segments,
+    { title: msg.title, channel: msg.channel, published: msg.published },
+    msg.playhead || 0
+  );
 }
 
 chrome.tabs.onRemoved.addListener((tabId) => releaseVideo(tabId));
@@ -322,11 +453,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     testGroq().then(sendResponse);
     return true; // keep the channel open for the async reply
   }
+  if (msg?.type === 'TEST_TAVILY') {
+    getSettings()
+      .then((s) => (s.tavilyApiKey ? tavilyUsage(s.tavilyApiKey) : { ok: false, error: 'No Tavily API key saved yet.' }))
+      .catch((e) => ({ ok: false, error: `Network error: ${e.message}` }))
+      .then(sendResponse);
+    return true;
+  }
   const tabId = sender.tab?.id;
   if (tabId === undefined) return;
   if (msg?.type === 'TRANSCRIPT') {
     onTranscript(tabId, msg);
   } else if (msg?.type === 'LEFT_VIDEO') {
     releaseVideo(tabId);
+  } else if (msg?.type === 'PLAYHEAD') {
+    // Viewer seeked or kept watching — re-aim the work at their new position.
+    const job = jobs.get(tabsWatching.get(tabId));
+    if (job && Number.isFinite(msg.time)) job.playhead = msg.time;
   }
 });

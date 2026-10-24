@@ -41,6 +41,18 @@ async function testGroq() {
   }
 }
 
+async function testTavily() {
+  await save();
+  setStatus('Testing Tavily…');
+  $('details').hidden = true;
+  const r = await chrome.runtime.sendMessage({ type: 'TEST_TAVILY' });
+  if (!r?.ok) { setStatus(r?.error || 'Test failed.', 'err'); return; }
+  const usage = r.used !== null && r.limit !== null
+    ? ` ${r.used} of ${r.limit} search credits used this month (each claim checked uses 1).`
+    : '';
+  setStatus(`Tavily key works.${usage}`, 'ok');
+}
+
 document.querySelectorAll('button.show').forEach((b) => {
   b.addEventListener('click', () => {
     const input = $(b.dataset.for);
@@ -51,6 +63,7 @@ document.querySelectorAll('button.show').forEach((b) => {
 });
 $('save').addEventListener('click', save);
 $('testGroq').addEventListener('click', testGroq);
+$('testTavily').addEventListener('click', testTavily);
 $('resetModels').addEventListener('click', () => {
   $('detectionModel').value = D.detectionModel;
   $('verdictModel').value = D.verdictModel;

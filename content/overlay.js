@@ -46,15 +46,22 @@ self.FactFlagOverlay = (() => {
     tipEl.className = 'factflag-tip';
     const head = document.createElement('div');
     head.className = 'factflag-tip-head';
-    head.textContent = `${fmtTime(claim.t)} · CANDIDATE · NOT FACT-CHECKED YET`;
+    head.textContent = `${claim.verdict || 'NOT CHECKED'} · ${fmtTime(claim.t)}`;
     const body = document.createElement('div');
+    body.className = 'factflag-tip-claim';
     body.textContent = claim.claim;
     tipEl.append(head, body);
-    if (claim.quote) {
-      const q = document.createElement('div');
-      q.className = 'factflag-tip-quote';
-      q.textContent = `“${claim.quote}”`;
-      tipEl.appendChild(q);
+    if (claim.explanation) {
+      const ex = document.createElement('div');
+      ex.className = 'factflag-tip-explanation';
+      ex.textContent = claim.explanation;
+      tipEl.appendChild(ex);
+    }
+    if (claim.sourceUrl) {
+      const src = document.createElement('div');
+      src.className = 'factflag-tip-source';
+      try { src.textContent = `Source: ${new URL(claim.sourceUrl).hostname.replace(/^www\./, '')}`; } catch (_) {}
+      tipEl.appendChild(src);
     }
     p.appendChild(tipEl);
 
@@ -76,7 +83,7 @@ self.FactFlagOverlay = (() => {
     const duration = v?.duration;
     if (!bar || !Number.isFinite(duration) || duration <= 0) return;
 
-    const key = `${duration}|${claims.map((c) => `${c.id}:${c.t}`).join(',')}`;
+    const key = `${duration}|${claims.map((c) => `${c.id}:${c.t}:${c.verdict}`).join(',')}`;
     if (layerEl && bar.contains(layerEl) && key === renderedKey) return;
     renderedKey = key;
 
@@ -86,7 +93,7 @@ self.FactFlagOverlay = (() => {
     layerEl.className = 'factflag-markers';
     for (const claim of claims) {
       const m = document.createElement('div');
-      m.className = 'factflag-marker';
+      m.className = `factflag-marker${claim.verdict ? ` factflag-${claim.verdict.toLowerCase()}` : ''}`;
       m.style.left = `${Math.min(100, (claim.t / duration) * 100)}%`;
       for (const ev of STOP_EVENTS) m.addEventListener(ev, (e) => e.stopPropagation());
       m.addEventListener('mouseenter', () => showTip(m, claim));

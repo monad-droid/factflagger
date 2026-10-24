@@ -36,7 +36,10 @@
   pointer-events: none; transform: translateX(-50%);
 }
 .factflag-tip-head { font-size: 11px; font-weight: 700; letter-spacing: 0.03em; opacity: 0.8; margin-bottom: 2px; }
-.factflag-tip-quote { margin-top: 4px; font-size: 12px; font-style: italic; opacity: 0.75; }
+.factflag-tip-claim { font-weight: 500; }
+.factflag-tip-explanation { margin-top: 4px; font-size: 12px; opacity: 0.9; }
+.factflag-tip-source { margin-top: 4px; font-size: 11px; opacity: 0.65; }
+.factflag-marker.factflag-false { --ff-color: #e53935; }
 
 /* While hovering one of our markers, hide YouTube's own preview thumbnail and
    chapter title so they don't overlap our card. */

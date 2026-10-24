@@ -205,6 +205,7 @@
       videoId,
       title: t?.videoTitle || document.title.replace(/ - YouTube$/, ''),
       channel: t?.channel || '',
+      published: t?.published || '',
       playhead: document.querySelector('#movie_player video')?.currentTime || 0,
       segments: result.segments
     }).catch(() => {});
@@ -213,24 +214,50 @@
   // ---- Updates from the background worker ----
   function statusFromState(state) {
     const n = state.claims.length;
-    const found = `${n} candidate${n === 1 ? '' : 's'} to fact-check`;
-    if (state.status === 'error') return `Error: ${state.error}`;
-    if (state.status === 'done') return `Scan complete · ${found}`;
-    const progress = `Finding checkable claims… ${state.chunksDone}/${state.chunksTotal} sections · ${found}`;
+    const checked = state.checked || 0;
+    const falseCount = state.claims.filter((c) => c.verdict === 'FALSE').length;
+    const falses = `${falseCount} false`;
+    if (state.status === 'error') {
+      return checked ? `${state.error} · ${checked} checked · ${falses}` : `Error: ${state.error}`;
+    }
+    if (state.status === 'done') {
+      return n ? `Done · ${checked} claim${checked === 1 ? '' : 's'} checked · ${falses}`
+        : 'Done · no checkable claims found';
+    }
+    const scanning = state.chunksDone < state.chunksTotal
+      ? ` · scanned ${state.chunksDone}/${state.chunksTotal} sections` : '';
+    const progress = `Checking ahead… ${checked} of ${n} claims checked · ${falses}${scanning}`;
     return state.note ? `${progress} · ${state.note}` : progress;
   }
+
+  // Tell the background where the viewer is, so it checks what's coming up next.
+  function sendPlayhead() {
+    const v = document.querySelector('#movie_player video');
+    if (!currentVideoId || !v) return;
+    chrome.runtime.sendMessage({ type: 'PLAYHEAD', time: v.currentTime }).catch(() => {});
+  }
+  document.addEventListener('seeked', sendPlayhead, true);
+  setInterval(() => {
+    const v = document.querySelector('#movie_player video');
+    if (v && !v.paused) sendPlayhead();
+  }, 15000);
 
   let loggedClaimsFor = null;
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg?.type !== 'STATE' || msg.state?.videoId !== currentVideoId) return;
     Overlay.setStatus(statusFromState(msg.state));
-    Overlay.setClaims(msg.state.claims);
+    // Only FALSE claims are shown on the video.
+    Overlay.setClaims(msg.state.claims.filter((c) => c.verdict === 'FALSE'));
     if (msg.state.status === 'done' && loggedClaimsFor !== currentVideoId) {
       loggedClaimsFor = currentVideoId;
-      console.info(LOG, `${msg.state.claims.length} claims found:`);
+      console.info(LOG, `All ${msg.state.claims.length} checked claims (only FALSE ones appear on the video):`);
       console.table(msg.state.claims.map((c) => ({
-        time: fmtTime(c.t), score: c.checkworthiness, claim: c.claim, quote: c.quote
+        time: fmtTime(c.t),
+        verdict: c.verdict || c.status,
+        claim: c.claim,
+        explanation: c.explanation || c.error || '',
+        source: c.sourceUrl || ''
       })));
     }
   });

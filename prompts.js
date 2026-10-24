@@ -66,5 +66,47 @@ EARLIER IN THE VIDEO (context only — do NOT extract claims from these lines):
 {{CONTEXT}}
 
 TRANSCRIPT TO CHECK:
-{{TRANSCRIPT}}`
+{{TRANSCRIPT}}`,
+
+  // --------------------------------------------------------------------------
+  //  2. VERDICTS  (uses the "Verdict model" from settings)
+  //  Runs once per claim, after one Tavily web search for that claim.
+  //  Only FALSE verdicts are shown on the video; the others are kept quietly
+  //  (you can see them all in the YouTube console as a table).
+  // --------------------------------------------------------------------------
+
+  // Search results fed to the verdict model. More = better evidence but more tokens.
+  searchResultsPerClaim: 5,
+
+  // How hard the verdict model "thinks": 'low', 'medium' or 'high'.
+  // A wrong FALSE is the worst mistake this tool can make, so this is higher
+  // than for claim detection.
+  verdictReasoningEffort: 'medium',
+
+  verdictSystem: `You are a careful, neutral fact-checker. Decide whether a claim made in a YouTube video is supported by the web search results provided.
+
+Use ONLY the search results below as evidence. Do NOT rely on your own memory or training — if the results don't settle it, the answer is UNVERIFIABLE.
+
+Verdicts:
+- TRUE: reliable results clearly confirm the claim. Allow for normal paraphrasing and rounding (a speaker saying "about 30%" when a source says 28% is TRUE).
+- FALSE: at least one reliable result DIRECTLY and CLEARLY contradicts the claim, and no reliable result supports it.
+- MISLEADING: partly accurate, but missing context or exaggerated in a way that gives a false overall impression.
+- UNVERIFIABLE: the results don't directly address the claim, are weak or unreliable, or disagree with each other.
+
+Rules:
+- When in doubt, choose UNVERIFIABLE. Never guess. Calling a true claim FALSE is the worst possible mistake.
+- Judge the claim as of the date the video was published. A claim that was true then is not FALSE just because things changed later.
+- Prefer authoritative sources (official statistics, scientific bodies, established news outlets, encyclopedias) over blogs, forums, and SEO content.
+- "explanation": ONE plain-language sentence saying what the evidence shows, e.g. "Census data shows the population was 331 million, not 400 million."
+- "source_url": copy EXACTLY the URL of the single best result behind your verdict. Use an empty string for UNVERIFIABLE.`,
+
+  // {{TITLE}}, {{PUBLISHED}}, {{CLAIM}}, {{QUOTE}}, {{RESULTS}} are filled in automatically.
+  verdictUser: `Video title: {{TITLE}}
+Video published: {{PUBLISHED}}
+
+CLAIM: {{CLAIM}}
+The speaker's exact words: "{{QUOTE}}"
+
+SEARCH RESULTS:
+{{RESULTS}}`
 };

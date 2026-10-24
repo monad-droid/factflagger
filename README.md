@@ -2,7 +2,9 @@
 
 A Brave/Chrome extension (Manifest V3) that fact-checks YouTube videos and flags false claims at the moment they're said. Personal use, loaded unpacked — no server, no Web Store.
 
-**Status: Phase 2** — finds checkable claims in the transcript and marks each one with a yellow triangle on the video's progress bar. Hover a triangle to read the claim; click it to jump there. Verdicts come in Phase 3.
+**Status: Phase 3** — finds checkable claims, web-searches each one (Tavily), and asks the verdict model for TRUE / FALSE / MISLEADING / UNVERIFIABLE using only the search results. **Only FALSE claims are shown**, as red triangles on the progress bar. Hover one for the claim, explanation, and source; click to jump there. The YouTube console prints a table of every verdict when a video is finished.
+
+**Free-tier budget:** each checked claim uses 1 Tavily credit (1,000 free per month) and two Groq requests. The settings page's *Test Tavily key* button shows how many credits you've used.
 
 ## Tweaking the AI prompts
 
@@ -26,7 +28,7 @@ All prompts live in **`prompts.js`**. Edit it in any text editor, then reload th
 - **Tavily API key** — from https://app.tavily.com
 - **On/off toggle**
 
-Click **Test Groq key & models** to check that your key works and both model IDs exist on your account. If a model is missing, the page lists the ones that are available.
+Click **Test Groq key & models** to check that your key works and both model IDs exist on your account. If a model is missing, the page lists the ones that are available. **Test Tavily key** checks the Tavily key and shows credits used this month (it doesn't spend any).
 
 Keys are stored only in `chrome.storage.local` in your browser and are never logged.
 
