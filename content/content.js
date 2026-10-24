@@ -382,6 +382,7 @@
   const alerted = new Set();     // claim ids alerted during this viewing
   const knownFalse = new Set();  // claim ids already known to be FALSE
   let lastTime = null;
+  let playedFrom = null;         // where the current stretch of normal playback began
 
   function playerVideo() {
     return document.querySelector('#movie_player video');
@@ -396,14 +397,15 @@
     const now = v.currentTime;
     const prev = lastTime;
     lastTime = now;
-    if (prev === null) return;
+    if (prev === null) { playedFrom = now; return; }
     // Seeking backwards: allow claims ahead of the new position to alert again.
     if (now < prev - 1) {
       for (const c of falseClaims) if (c.t > now) alerted.delete(c.id);
+      playedFrom = now;
       return;
     }
     // Only normal playback counts — skipping past a claim doesn't trigger it.
-    if (now - prev > 3) return;
+    if (now - prev > 3) { playedFrom = now; return; }
     for (const c of falseClaims) {
       if (!alerted.has(c.id) && c.t > prev && c.t <= now) {
         alerted.add(c.id);
@@ -428,7 +430,8 @@
     const v = playerVideo();
     if (v && !v.paused && !adPlaying()) {
       for (const c of justArrived) {
-        if (!alerted.has(c.id) && v.currentTime >= c.t && v.currentTime - c.t <= LATE_ALERT_SECONDS) {
+        const heard = playedFrom !== null && c.t >= playedFrom; // played through it since the last skip
+        if (heard && !alerted.has(c.id) && v.currentTime >= c.t && v.currentTime - c.t <= LATE_ALERT_SECONDS) {
           alerted.add(c.id);
           Overlay.alert(c);
         }
@@ -444,6 +447,7 @@
     falseClaims = [];
     alerted.clear();
     knownFalse.clear();
+    playedFrom = null;
     lastTime = null;
     if (!videoId) { runToken++; Overlay.clear(); return; }
     handleVideo(videoId);

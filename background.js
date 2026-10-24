@@ -3,7 +3,7 @@
 importScripts('shared/defaults.js', 'prompts.js', 'lib/groq.js', 'lib/tavily.js', 'lib/budget.js');
 
 const GROQ_BASE = 'https://api.groq.com/openai/v1';
-const CHUNK_SECONDS = 120;
+const CHUNK_SECONDS = 60;   // transcript is scanned for claims a minute at a time
 const LOG = '[FactFlag]';
 
 chrome.runtime.onInstalled.addListener((details) => {
@@ -166,7 +166,7 @@ async function detectClaimsInChunk(chunk, meta, settings, concepts, onWait) {
   });
   recordGroqCall(settings.detectionModel, usage, limits);
   if (usage) {
-    console.info(LOG, `chunk ${fmtTime(chunk.start)}: ${usage.total_tokens} tokens ` +
+    console.info(LOG, `chunk ${fmtTime(chunk.start)}: ${usage.total_tokens} tokens, ${usage.prompt_tokens_details?.cached_tokens || 0} cached ` +
       `(prompt ${usage.prompt_tokens}, completion ${usage.completion_tokens})`);
   }
 
@@ -252,7 +252,7 @@ async function verifyClaim(claim, meta, settings, onWait) {
   });
   recordGroqCall(settings.verdictModel, usage, limits);
   if (usage) {
-    console.info(LOG, `verdict ${fmtTime(claim.t)}: ${usage.total_tokens} tokens ` +
+    console.info(LOG, `verdict ${fmtTime(claim.t)}: ${usage.total_tokens} tokens, ${usage.prompt_tokens_details?.cached_tokens || 0} cached ` +
       `(prompt ${usage.prompt_tokens}, completion ${usage.completion_tokens})`);
   }
 
@@ -367,14 +367,15 @@ async function triageClaims(claims, meta, settings, onWait) {
 
 // ---------------------------------------------------------------------------
 // Just-in-time checking.
-// Only work on what's within LOOKAHEAD_SECONDS ahead of where the viewer is
+// Only work on what's within checkAheadSeconds (prompts.js) of where the viewer is
 // listening (scaled up at faster playback speeds). Videos you abandon cost only
 // what you heard plus that window. Progress is saved after every step so the
 // work resumes exactly where it left off if the service worker goes to sleep.
 // ---------------------------------------------------------------------------
-const LOOKAHEAD_SECONDS = 150;
 const BEHIND_SLACK_SECONDS = 15; // a claim that started a moment ago is still being heard
-const STATE_VERSION = 2;
+const MIN_LEAD_SECONDS = 10;     // a verdict ready with less time to spare than this is "too close"
+const LEAD_STEP_SECONDS = 15;    // how much to widen the window when that happens
+const STATE_VERSION = 3; // bump when the saved format or chunk size changes
 
 const videoKey = (videoId) => `video:${videoId}`;
 const transcriptKey = (videoId) => `transcript:${videoId}`;
@@ -424,8 +425,13 @@ function newState(videoId, meta, chunkCount) {
   };
 }
 
+function lookaheadSeconds(job) {
+  const base = Number(self.FACTFLAG_PROMPTS.checkAheadSeconds) || 75;
+  return Math.min(base * 2, base + (job.extraAhead || 0));
+}
+
 function windowFor(job) {
-  const ahead = LOOKAHEAD_SECONDS * Math.max(1, job.rate || 1);
+  const ahead = lookaheadSeconds(job) * Math.max(1, job.rate || 1);
   return { from: job.playhead - BEHIND_SLACK_SECONDS, to: job.playhead + ahead };
 }
 
@@ -476,11 +482,23 @@ async function processChunk(job, index, settings, onWait) {
 
 async function processClaim(job, claim, settings, onWait) {
   claim.status = 'checking';
+  const startLead = (claim.t - job.playhead) / Math.max(1, job.rate || 1);
   try {
     const result = await verifyClaim(claim, job.meta, settings, onWait);
     if (job.cancelled) { claim.status = 'pending'; return; }
     Object.assign(claim, result, { status: 'done' });
-    console.info(LOG, `${fmtTime(claim.t)} ${claim.verdict}: ${claim.claim}`);
+    // How far ahead of the viewer was this verdict ready (in seconds of video)?
+    const lead = (claim.t - job.playhead) / Math.max(1, job.rate || 1);
+    console.info(LOG, `${fmtTime(claim.t)} ${claim.verdict} (ready ${Math.round(lead)}s before it's said): ${claim.claim}`);
+    // Only widen if we started with enough time and still cut it close — not
+    // when the viewer simply skipped to right before (or past) the claim.
+    if (startLead >= MIN_LEAD_SECONDS * 2 && lead < MIN_LEAD_SECONDS) {
+      const before = lookaheadSeconds(job);
+      job.extraAhead = (job.extraAhead || 0) + LEAD_STEP_SECONDS;
+      if (lookaheadSeconds(job) > before) {
+        console.info(LOG, `verdict was nearly late — checking further ahead (${lookaheadSeconds(job)}s) for this video`);
+      }
+    }
   } catch (e) {
     if (isFatal(e)) { claim.status = 'pending'; throw e; }
     console.warn(LOG, `Could not check claim at ${fmtTime(claim.t)}: ${e.message}`);

@@ -5,7 +5,7 @@ A Brave/Chrome extension (Manifest V3) that fact-checks YouTube videos and flags
 **Status: Phase 3+** — finds checkable claims, screens them, web-searches the ones that might be wrong (Tavily), and asks the verdict model for a verdict using only the search results. **Only FALSE claims are shown.** When playback reaches one, an alert card pops up in the top-right of the video (claim, speaker's words, what the source says, clickable source) and closes by itself after enough time to read it (10–25 s; hovering keeps it open). FALSE claims also get red triangles on the progress bar.
 
 **Saving the free tiers:**
-- *Just in time:* FactFlag only works on the ~2½ minutes ahead of where you're listening (more at faster playback). Pausing costs nothing; abandoning a video costs only what you heard.
+- *Just in time:* FactFlag only works on the ~75 seconds ahead of where you're listening (`checkAheadSeconds` in `prompts.js`; more at faster playback, and it widens itself if a verdict nearly arrives late). Pausing costs nothing; abandoning a video costs only what you heard.
 - *Triage:* before searching, the verdict model screens each claim; ones it is highly confident are true aren't searched. Turn off with `triageEnabled: false` in `prompts.js`.
 - *Budget meter:* the toolbar badge shows Tavily searches left this month; the settings page shows Tavily and Groq usage.
 

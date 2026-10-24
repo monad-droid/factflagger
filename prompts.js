@@ -5,6 +5,16 @@
 
 self.FACTFLAG_PROMPTS = {
   // --------------------------------------------------------------------------
+  //  TIMING
+  // --------------------------------------------------------------------------
+
+  // How far ahead of what you're hearing FactFlag checks, in seconds of video.
+  // Smaller = fewer wasted searches on parts you never watch. If a verdict
+  // ever arrives with under 10 s to spare, FactFlag widens this by 15 s for
+  // that video (up to double), so alerts aren't missed.
+  checkAheadSeconds: 75,
+
+  // --------------------------------------------------------------------------
   //  1. CLAIM DETECTION  (uses the "Claim-detection model" from settings)
   //  Runs once per ~2-minute chunk of transcript.
   // --------------------------------------------------------------------------
