@@ -2,7 +2,7 @@
 
 A Brave/Chrome extension (Manifest V3) that fact-checks YouTube videos and flags false claims at the moment they're said. Personal use, loaded unpacked — no server, no Web Store.
 
-**Status: Phase 3+** — finds checkable claims, screens them, web-searches the ones that might be wrong (Tavily), and asks the verdict model for a verdict using only the search results. **Only FALSE claims are shown**, as red triangles on the progress bar; hover one for the claim, the speaker's words, the source's quote and the source.
+**Status: Phase 3+** — finds checkable claims, screens them, web-searches the ones that might be wrong (Tavily), and asks the verdict model for a verdict using only the search results. **Only FALSE claims are shown.** When playback reaches one, an alert card pops up in the top-right of the video (claim, speaker's words, what the source says, clickable source) and closes by itself after enough time to read it (10–25 s; hovering keeps it open). FALSE claims also get red triangles on the progress bar.
 
 **Saving the free tiers:**
 - *Just in time:* FactFlag only works on the ~2½ minutes ahead of where you're listening (more at faster playback). Pausing costs nothing; abandoning a video costs only what you heard.

@@ -376,12 +376,64 @@
     }
   }
 
+  // ---- Pop-up alert when playback reaches a FALSE claim ----
+  const LATE_ALERT_SECONDS = 15; // verdict arrived just after the claim was said
+  let falseClaims = [];
+  const alerted = new Set();     // claim ids alerted during this viewing
+  const knownFalse = new Set();  // claim ids already known to be FALSE
+  let lastTime = null;
+
+  function playerVideo() {
+    return document.querySelector('#movie_player video');
+  }
+  function adPlaying() {
+    return !!document.querySelector('#movie_player.ad-showing');
+  }
+
+  function checkAlerts() {
+    const v = playerVideo();
+    if (!v || !currentVideoId || adPlaying()) { lastTime = null; return; }
+    const now = v.currentTime;
+    const prev = lastTime;
+    lastTime = now;
+    if (prev === null) return;
+    // Seeking backwards: allow claims ahead of the new position to alert again.
+    if (now < prev - 1) {
+      for (const c of falseClaims) if (c.t > now) alerted.delete(c.id);
+      return;
+    }
+    // Only normal playback counts — skipping past a claim doesn't trigger it.
+    if (now - prev > 3) return;
+    for (const c of falseClaims) {
+      if (!alerted.has(c.id) && c.t > prev && c.t <= now) {
+        alerted.add(c.id);
+        Overlay.alert(c);
+      }
+    }
+  }
+  // timeupdate doesn't bubble, so listen in the capture phase.
+  document.addEventListener('timeupdate', checkAlerts, true);
+
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg?.type !== 'STATE' || msg.state?.videoId !== currentVideoId) return;
     Overlay.setStatus(statusFromState(msg.state));
     // Only FALSE claims are shown on the video.
-    Overlay.setClaims(msg.state.claims.filter((c) => c.verdict === 'FALSE'));
+    falseClaims = msg.state.claims.filter((c) => c.verdict === 'FALSE');
+    Overlay.setClaims(falseClaims);
     logNewVerdicts(msg.state);
+    // A verdict that arrives a few seconds after the claim was said still alerts
+    // (only verdicts that just arrived — not old ones, e.g. after skipping ahead).
+    const justArrived = falseClaims.filter((c) => !knownFalse.has(c.id));
+    for (const c of falseClaims) knownFalse.add(c.id);
+    const v = playerVideo();
+    if (v && !v.paused && !adPlaying()) {
+      for (const c of justArrived) {
+        if (!alerted.has(c.id) && v.currentTime >= c.t && v.currentTime - c.t <= LATE_ALERT_SECONDS) {
+          alerted.add(c.id);
+          Overlay.alert(c);
+        }
+      }
+    }
   });
 
   function onNavigate() {
@@ -389,6 +441,10 @@
     if (videoId === currentVideoId) return;
     if (currentVideoId) chrome.runtime.sendMessage({ type: 'LEFT_VIDEO' }).catch(() => {});
     currentVideoId = videoId;
+    falseClaims = [];
+    alerted.clear();
+    knownFalse.clear();
+    lastTime = null;
     if (!videoId) { runToken++; Overlay.clear(); return; }
     handleVideo(videoId);
   }

@@ -126,7 +126,111 @@ self.FactFlagOverlay = (() => {
     if (claims.length) renderMarkers();
   }, 1000);
 
+  // ---- Alert card ----
+  // One card at a time; later alerts wait in a queue. Hovering the card pauses
+  // its countdown so there's time to read or click the source.
+  const cardQueue = [];
+  let cardEl = null;
+
+  // Roughly reading time: ~3 words/second plus a few seconds to notice it.
+  function readingMs(claim) {
+    const text = [claim.claim, claim.quote, claim.explanation, claim.evidenceQuote].join(' ');
+    const words = text.split(/\s+/).filter(Boolean).length;
+    return Math.min(25000, Math.max(10000, (words / 3 + 4) * 1000));
+  }
+
+  function line(className, text) {
+    const d = document.createElement('div');
+    d.className = className;
+    d.textContent = text;
+    return d;
+  }
+
+  function closeCard() {
+    cardEl?._ffStop?.();
+    cardEl?.remove();
+    cardEl = null;
+    if (cardQueue.length) openCard(cardQueue.shift());
+  }
+
+  function openCard(claim) {
+    const p = player();
+    if (!p) return;
+    cardEl = document.createElement('div');
+    cardEl.className = 'factflag-card';
+    cardEl.setAttribute('role', 'alert');
+
+    const head = document.createElement('div');
+    head.className = 'factflag-card-head';
+    const badge = line('factflag-card-badge', claim.verdict || 'FALSE');
+    const time = line('factflag-card-time', `said at ${fmtTime(claim.t)}`);
+    const close = document.createElement('button');
+    close.className = 'factflag-card-close';
+    close.setAttribute('aria-label', 'Close');
+    close.textContent = '✕';
+    close.addEventListener('click', closeCard);
+    head.append(badge, time, close);
+    cardEl.appendChild(head);
+
+    cardEl.appendChild(line('factflag-card-claim', claim.claim));
+    if (claim.quote) cardEl.appendChild(line('factflag-card-quote', `Speaker: “${claim.quote}”`));
+    if (claim.explanation) cardEl.appendChild(line('factflag-card-line', claim.explanation));
+    if (claim.evidenceQuote) cardEl.appendChild(line('factflag-card-quote', `Source says: “${claim.evidenceQuote}”`));
+    if (claim.sourceUrl) {
+      const src = document.createElement('div');
+      src.className = 'factflag-card-line';
+      const a = document.createElement('a');
+      a.href = claim.sourceUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      try { a.textContent = new URL(claim.sourceUrl).hostname.replace(/^www\./, ''); } catch (_) { a.textContent = 'source'; }
+      src.append('Source: ', a);
+      cardEl.appendChild(src);
+    }
+
+    const timer = document.createElement('div');
+    timer.className = 'factflag-card-timer';
+    cardEl.appendChild(timer);
+
+    // Clicks on the card must not reach the player (which would pause/play).
+    for (const ev of ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup', 'dblclick']) {
+      cardEl.addEventListener(ev, (e) => e.stopPropagation());
+    }
+
+    // Countdown that pauses while the pointer is over the card.
+    const total = readingMs(claim);
+    let remaining = total;
+    let last = performance.now();
+    let hovering = false;
+    cardEl.addEventListener('mouseenter', () => { hovering = true; });
+    cardEl.addEventListener('mouseleave', () => { hovering = false; last = performance.now(); });
+    const tick = setInterval(() => {
+      const now = performance.now();
+      if (!hovering) remaining -= now - last;
+      last = now;
+      timer.style.width = `${Math.max(0, (remaining / total) * 100)}%`;
+      if (remaining <= 0) closeCard();
+    }, 100);
+    cardEl._ffStop = () => clearInterval(tick);
+
+    p.appendChild(cardEl);
+  }
+
+  function alertClaim(claim) {
+    if (cardEl) cardQueue.push(claim);
+    else openCard(claim);
+  }
+
+  function clearCards() {
+    cardQueue.length = 0;
+    cardEl?._ffStop?.();
+    cardEl?.remove();
+    cardEl = null;
+  }
+
   return {
+    alert: alertClaim,
+    clearAlerts: clearCards,
     setStatus(text) {
       statusText = text || '';
       renderStatus();
@@ -144,6 +248,7 @@ self.FactFlagOverlay = (() => {
     clear() {
       this.setClaims([]);
       this.setStatus('');
+      clearCards();
     }
   };
 })();
