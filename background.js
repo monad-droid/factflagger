@@ -258,9 +258,10 @@ const VERDICT_SCHEMA = {
   properties: {
     verdict: { type: 'string', enum: ['TRUE', 'FALSE', 'MISLEADING', 'UNVERIFIABLE'] },
     explanation: { type: 'string' },
-    source_url: { type: 'string' }
+    source_url: { type: 'string' },
+    evidence_quote: { type: 'string' }
   },
-  required: ['verdict', 'explanation', 'source_url'],
+  required: ['verdict', 'explanation', 'source_url', 'evidence_quote'],
   additionalProperties: false
 };
 
@@ -302,15 +303,48 @@ async function verifyClaim(claim, meta, settings, onWait) {
 
   let verdict = ['TRUE', 'FALSE', 'MISLEADING', 'UNVERIFIABLE'].includes(json.verdict) ? json.verdict : 'UNVERIFIABLE';
   let explanation = String(json.explanation || '').trim();
+  const evidenceQuote = String(json.evidence_quote || '').trim();
   // The source must be one of the search results — never a URL the model made up.
   const source = results.find((r) => r.url === String(json.source_url || '').trim());
-  if (!source && verdict !== 'UNVERIFIABLE' && verdict !== 'TRUE') {
-    // A FALSE/MISLEADING verdict with no real source behind it isn't trustworthy.
-    console.info(LOG, `verdict ${fmtTime(claim.t)}: ${verdict} downgraded — source URL not in search results`);
-    verdict = 'UNVERIFIABLE';
-    explanation = `${explanation} (Downgraded: no matching source.)`.trim();
+
+  // A FALSE/MISLEADING verdict must be backed by a real, specific contradiction.
+  if (verdict === 'FALSE' || verdict === 'MISLEADING') {
+    const reason = falseVerdictProblem({ source, evidenceQuote, explanation });
+    if (reason) {
+      console.info(LOG, `verdict ${fmtTime(claim.t)}: ${verdict} downgraded to UNVERIFIABLE — ${reason}`);
+      verdict = 'UNVERIFIABLE';
+      explanation = `${explanation} (Not flagged: ${reason}.)`;
+    }
   }
-  return { verdict, explanation, sourceUrl: source?.url || '', sourceTitle: source?.title || '' };
+  return {
+    verdict,
+    explanation,
+    evidenceQuote: verdict === 'UNVERIFIABLE' ? '' : evidenceQuote,
+    sourceUrl: source?.url || '',
+    sourceTitle: source?.title || ''
+  };
+}
+
+const normalizeText = (s) => s.toLowerCase()
+  .replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"')
+  .replace(/\s+/g, ' ').trim();
+
+// "No evidence" is not the same as "shown to be false".
+const ABSENCE_OF_EVIDENCE = /\b(no evidence|unsubstantiated|unproven|lacks? evidence|not supported by evidence|could not (be )?(verify|verified|confirm)|insufficient evidence|no (reliable|credible) (source|data))\b/i;
+
+// Returns why a FALSE/MISLEADING verdict can't be trusted, or '' if it's fine.
+function falseVerdictProblem({ source, evidenceQuote, explanation }) {
+  if (!source) return 'its source URL was not one of the search results';
+  if (ABSENCE_OF_EVIDENCE.test(explanation)) return 'the evidence only says the claim is unproven, not that it is false';
+  const quote = normalizeText(evidenceQuote.replace(/^["“]|["”]$/g, ''));
+  if (quote.length < 20) return 'no supporting quote from the source';
+  // Allow the model to trim with "..." — every piece must appear in the source text.
+  const sourceText = normalizeText(`${source.title} ${source.content}`);
+  const pieces = quote.split(/\s*(?:\.\.\.|…)\s*/).filter((p) => p.length >= 8);
+  if (!pieces.length || !pieces.every((p) => sourceText.includes(p))) {
+    return 'its quote does not appear in the source';
+  }
+  return '';
 }
 
 // Errors that should stop all checking for this video rather than skip one claim.

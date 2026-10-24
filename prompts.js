@@ -94,16 +94,19 @@ Use ONLY the search results below as evidence. Do NOT rely on your own memory or
 
 Verdicts:
 - TRUE: reliable results clearly confirm the claim. Allow for normal paraphrasing and rounding (a speaker saying "about 30%" when a source says 28% is TRUE).
-- FALSE: at least one reliable result DIRECTLY and CLEARLY contradicts the claim, and no reliable result supports it.
+- FALSE: at least one reliable result DIRECTLY and CLEARLY contradicts the claim with specific facts, and no reliable result supports it. "There is no evidence for this", "unsubstantiated", or "unproven" is NOT a contradiction — that is UNVERIFIABLE.
 - MISLEADING: partly accurate, but missing context or exaggerated in a way that gives a false overall impression.
 - UNVERIFIABLE: the results don't directly address the claim, are weak or unreliable, or disagree with each other.
 
 Rules:
 - When in doubt, choose UNVERIFIABLE. Never guess. Calling a true claim FALSE is the worst possible mistake.
+- Contested political or social claims (causes of unrest, immigration, crime, elections) need especially clear, specific contradicting facts for FALSE. One outlet's characterization or opinion is not enough.
+- Judge the speaker's actual words, not just the one-sentence summary. If the summary seems to overstate or merge what was said, judge what was actually said.
 - Judge the claim as of the date the video was published. A claim that was true then is not FALSE just because things changed later.
 - Prefer authoritative sources (official statistics, scientific bodies, established news outlets, encyclopedias) over blogs, forums, and SEO content.
 - "explanation": ONE plain-language sentence saying what the evidence shows, e.g. "Census data shows the population was 331 million, not 400 million."
-- "source_url": copy EXACTLY the URL of the single best result behind your verdict. Use an empty string for UNVERIFIABLE.`,
+- "source_url": copy EXACTLY the URL of the single best result behind your verdict. Use an empty string for UNVERIFIABLE.
+- "evidence_quote": for FALSE or MISLEADING, copy WORD FOR WORD the sentence from that search result which contradicts the claim (it is checked automatically — a quote that isn't in the result cancels the verdict). Use an empty string for TRUE or UNVERIFIABLE.`,
 
   // {{TITLE}}, {{PUBLISHED}}, {{CLAIM}}, {{QUOTE}}, {{RESULTS}} are filled in automatically.
   verdictUser: `Video title: {{TITLE}}

@@ -57,6 +57,18 @@ self.FactFlagOverlay = (() => {
       ex.textContent = claim.explanation;
       tipEl.appendChild(ex);
     }
+    if (claim.quote) {
+      const q = document.createElement('div');
+      q.className = 'factflag-tip-quote';
+      q.textContent = `Speaker: “${claim.quote}”`;
+      tipEl.appendChild(q);
+    }
+    if (claim.evidenceQuote) {
+      const ev = document.createElement('div');
+      ev.className = 'factflag-tip-quote';
+      ev.textContent = `Source says: “${claim.evidenceQuote}”`;
+      tipEl.appendChild(ev);
+    }
     if (claim.sourceUrl) {
       const src = document.createElement('div');
       src.className = 'factflag-tip-source';

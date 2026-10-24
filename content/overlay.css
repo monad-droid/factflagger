@@ -44,3 +44,4 @@
 /* While hovering one of our markers, hide YouTube's own preview thumbnail and
    chapter title so they don't overlap our card. */
 #movie_player.factflag-hovering .ytp-tooltip { display: none !important; }
+.factflag-tip-quote { margin-top: 4px; font-size: 12px; font-style: italic; opacity: 0.75; }

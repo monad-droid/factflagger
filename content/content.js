@@ -257,6 +257,7 @@
         verdict: c.verdict || c.status,
         claim: c.claim,
         explanation: c.explanation || c.error || '',
+        evidence: c.evidenceQuote || '',
         source: c.sourceUrl || ''
       })));
     }
