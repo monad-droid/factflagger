@@ -114,6 +114,8 @@ self.FactFlagOverlay = (() => {
         e.stopPropagation();
         const vid = video();
         if (vid) vid.currentTime = claim.t;
+        hideTip();
+        showCardNow(claim); // reopen its card, e.g. to copy it
       });
       layerEl.appendChild(m);
     }
@@ -146,6 +148,40 @@ self.FactFlagOverlay = (() => {
     return d;
   }
 
+  // Plain-text summary for double-checking a claim yourself.
+  function copyText(claim) {
+    const videoId = new URLSearchParams(location.search).get('v');
+    const title = document.title.replace(/^\(\d+\)\s*/, '').replace(/ - YouTube$/, '');
+    const link = videoId ? `https://youtu.be/${videoId}?t=${Math.floor(claim.t)}` : location.href;
+    return [
+      `Claim: ${claim.claim}`,
+      claim.quote ? `Speaker's words: "${claim.quote}"` : '',
+      `Said at ${fmtTime(claim.t)}${title ? ` in "${title}"` : ''} — ${link}`,
+      '',
+      `FactFlag verdict: ${claim.verdict || 'FALSE'}${claim.explanation ? ` — ${claim.explanation}` : ''}`,
+      claim.evidenceQuote ? `Source says: "${claim.evidenceQuote}"` : '',
+      claim.sourceUrl ? `Source: ${claim.sourceUrl}` : ''
+    ].filter((l, i, all) => l !== '' || (i > 0 && all[i - 1] !== '')).join('\n').trim();
+  }
+
+  async function copyToClipboard(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (_) {
+      // Fallback for pages where the async clipboard API is blocked.
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+      document.body.appendChild(ta);
+      ta.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (_) {}
+      ta.remove();
+      return ok;
+    }
+  }
+
   function closeCard() {
     cardEl?._ffStop?.();
     cardEl?.remove();
@@ -169,7 +205,16 @@ self.FactFlagOverlay = (() => {
     close.setAttribute('aria-label', 'Close');
     close.textContent = '✕';
     close.addEventListener('click', closeCard);
-    head.append(badge, time, close);
+    const copy = document.createElement('button');
+    copy.className = 'factflag-card-copy';
+    copy.textContent = 'Copy';
+    copy.title = 'Copy the claim, quote, link and source to double-check it yourself';
+    copy.addEventListener('click', async () => {
+      const ok = await copyToClipboard(copyText(claim));
+      copy.textContent = ok ? 'Copied ✓' : 'Copy failed';
+      setTimeout(() => { copy.textContent = 'Copy'; }, 1800);
+    });
+    head.append(badge, time, copy, close);
     cardEl.appendChild(head);
 
     cardEl.appendChild(line('factflag-card-claim', claim.claim));
@@ -214,6 +259,14 @@ self.FactFlagOverlay = (() => {
     cardEl._ffStop = () => clearInterval(tick);
 
     p.appendChild(cardEl);
+  }
+
+  // Show this claim's card right away, replacing whatever card is open.
+  function showCardNow(claim) {
+    cardEl?._ffStop?.();
+    cardEl?.remove();
+    cardEl = null;
+    openCard(claim);
   }
 
   function alertClaim(claim) {
