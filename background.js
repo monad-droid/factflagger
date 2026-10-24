@@ -409,7 +409,7 @@ async function triageClaims(claims, meta, settings, onWait) {
 const BEHIND_SLACK_SECONDS = 15; // a claim that started a moment ago is still being heard
 const MIN_LEAD_SECONDS = 10;     // a verdict ready with less time to spare than this is "too close"
 const LEAD_STEP_SECONDS = 15;    // how much to widen the window when that happens
-const STATE_VERSION = 4; // bump when the saved format, chunking or prompts change
+const STATE_VERSION = 5; // bump when the saved format, chunking or prompts change
 
 const videoKey = (videoId) => `video:${videoId}`;
 const transcriptKey = (videoId) => `transcript:${videoId}`;

@@ -60,7 +60,8 @@ For each claim, give "checkworthiness" from 1 to 5:
 
 Output rules:
 - The transcript may come from auto-generated captions with no punctuation and some misheard words. Interpret sensibly.
-- "claim": rewrite as ONE self-contained sentence that makes sense on its own. Replace pronouns ("he", "it", "this") with what they refer to. Keep the specific numbers, names, and dates.
+- "claim": restate as ONE self-contained sentence, staying as close to the speaker's own wording as possible. Only replace pronouns ("he", "it", "this") with what they refer to and add a missing subject so it makes sense on its own. Keep the specific numbers, names, and dates.
+- NEVER make a claim stronger than what was said. Keep the speaker's qualifiers and hedges exactly ("a lot of the time", "often", "some", "about", "I think", "more than"). Do not turn "a lot" into "most", "more" into "the most", "some studies" into "studies show", or a specific case into a general rule. A sharpened claim is easier to rate false and is unfair to the speaker.
 - "quote": the speaker's exact words, copied from the transcript (shorten with "..." if long).
 - Read each sentence in full, together with the sentences around it, before deciding. A claim must be judged by what the speaker actually says in the complete sentence, not a fragment.
 - Rhetorical set-ups: if a line is a question, tease, or set-up that the speaker immediately clarifies, narrows, or reframes in the following lines (including the "COMING UP NEXT" lines), do NOT extract the set-up. The clarified statement is what they mean, and it will be checked on its own.
@@ -142,15 +143,15 @@ Use ONLY the search results below as evidence. Do NOT rely on your own memory or
 Verdicts:
 - TRUE: reliable results clearly confirm the claim. Allow for normal paraphrasing and rounding (a speaker saying "about 30%" when a source says 28% is TRUE).
 - FALSE: at least one reliable result DIRECTLY and CLEARLY contradicts the claim with specific facts, and no reliable result supports it. "There is no evidence for this", "unsubstantiated", or "unproven" is NOT a contradiction — that is UNVERIFIABLE.
-- MISLEADING: partly accurate, but missing context or exaggerated in a way that gives a false overall impression.
+- MISLEADING: partly accurate, but missing context or exaggerated in a way that gives a false overall impression. If the core of the claim is supported but it overstates (e.g. says "the highest" when the data shows "higher than some"), that is MISLEADING, not FALSE.
 - UNVERIFIABLE: the results don't directly address the claim, are weak or unreliable, or disagree with each other.
 
 Rules:
 - When in doubt, choose UNVERIFIABLE. Never guess. Calling a true claim FALSE is the worst possible mistake.
 - Contested political or social claims (causes of unrest, immigration, crime, elections) need especially clear, specific contradicting facts for FALSE. One outlet's characterization or opinion is not enough.
-- Judge the speaker's actual words, not just the one-sentence summary. If the summary seems to overstate or merge what was said, judge what was actually said.
+- Judge the speaker's actual words, including their qualifiers ("a lot of the time", "often", "about"), not just the one-sentence summary. If the summary is stronger, broader, or more absolute than what was said, judge what was actually said.
 - Judge the claim as of the date the video was published. A claim that was true then is not FALSE just because things changed later.
-- Prefer authoritative sources (official statistics, scientific bodies, established news outlets, encyclopedias) over blogs, forums, and SEO content.
+- Source quality, best first: (1) primary data — government statistics agencies and official bodies (e.g. .gov), peer-reviewed research; (2) encyclopedias and established news outlets; (3) everything else. Advocacy organizations, think tanks, campaign groups, and opinion pieces — on ANY side — are not enough on their own: never call a claim FALSE when the only contradicting sources are of that kind; choose MISLEADING or UNVERIFIABLE instead. Prefer a primary source for "source_url" whenever one is in the results.
 - "explanation": ONE plain-language sentence saying what the evidence shows, e.g. "Census data shows the population was 331 million, not 400 million."
 - "source_url": copy EXACTLY the URL of the single best result behind your verdict. Use an empty string for UNVERIFIABLE.
 - "evidence_quote": for FALSE or MISLEADING, copy WORD FOR WORD the sentence from that search result which contradicts the claim (it is checked automatically — a quote that isn't in the result cancels the verdict). Use an empty string for TRUE or UNVERIFIABLE.`,
