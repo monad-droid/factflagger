@@ -60,6 +60,8 @@ const MAX_SENTENCE_WORDS = 45;               // safety cap for unpunctuated auto
 const MAX_SENTENCE_SECONDS = 30;
 const PAUSE_SPLIT_SECONDS = 1.2;             // only used when captions have no punctuation
 const CONTEXT_SENTENCES = 4;                 // earlier sentences shown to the model for context
+const CONTEXT_AFTER_WORDS = 60;              // following words shown too (a set-up may be clarified next;
+const CONTEXT_AFTER_MAX_SENTENCES = 8;       // counted in words because filler like "No, actually, no." is short)
 
 function buildSentences(segments) {
   const punctuated = segments.filter((s) => /[.!?]["'”’)\]]*$/.test(s.text)).length;
@@ -114,7 +116,17 @@ function makeChunks(segments) {
     }
     cur.sentences.push(sent);
     cur.end = Math.max(cur.end, sent.end);
+    cur.lastIndex = i;
   });
+  for (const c of chunks) {
+    c.after = [];
+    let words = 0;
+    for (let j = c.lastIndex + 1; j < sentences.length; j++) {
+      if (words >= CONTEXT_AFTER_WORDS || c.after.length >= CONTEXT_AFTER_MAX_SENTENCES) break;
+      c.after.push(sentences[j]);
+      words += sentences[j].text.split(/\s+/).length;
+    }
+  }
   return chunks;
 }
 
@@ -166,6 +178,7 @@ async function detectClaimsInChunk(chunk, meta, settings, concepts, onWait) {
   const asLines = (list) => list.map((s) => `[${Math.floor(s.start)}] ${s.text}`).join('\n');
   const transcript = asLines(chunk.sentences);
   const context = chunk.context.length ? asLines(chunk.context) : '(start of video)';
+  const after = chunk.after.length ? asLines(chunk.after) : '(end of video)';
   const { json, usage, limits } = await groqChatJson({
     apiKey: settings.groqApiKey,
     model: settings.detectionModel,
@@ -176,6 +189,7 @@ async function detectClaimsInChunk(chunk, meta, settings, concepts, onWait) {
       RANGE: `${fmtTime(chunk.start)}–${fmtTime(chunk.end)}`,
       CONCEPTS: concepts.size ? [...concepts].join('; ') : '(none yet)',
       CONTEXT: context,
+      AFTER: after,
       TRANSCRIPT: transcript
     }),
     schemaName: 'claims',
@@ -395,7 +409,7 @@ async function triageClaims(claims, meta, settings, onWait) {
 const BEHIND_SLACK_SECONDS = 15; // a claim that started a moment ago is still being heard
 const MIN_LEAD_SECONDS = 10;     // a verdict ready with less time to spare than this is "too close"
 const LEAD_STEP_SECONDS = 15;    // how much to widen the window when that happens
-const STATE_VERSION = 3; // bump when the saved format or chunk size changes
+const STATE_VERSION = 4; // bump when the saved format, chunking or prompts change
 
 const videoKey = (videoId) => `video:${videoId}`;
 const transcriptKey = (videoId) => `transcript:${videoId}`;

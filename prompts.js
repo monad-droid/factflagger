@@ -63,12 +63,13 @@ Output rules:
 - "claim": rewrite as ONE self-contained sentence that makes sense on its own. Replace pronouns ("he", "it", "this") with what they refer to. Keep the specific numbers, names, and dates.
 - "quote": the speaker's exact words, copied from the transcript (shorten with "..." if long).
 - Read each sentence in full, together with the sentences around it, before deciding. A claim must be judged by what the speaker actually says in the complete sentence, not a fragment.
+- Rhetorical set-ups: if a line is a question, tease, or set-up that the speaker immediately clarifies, narrows, or reframes in the following lines (including the "COMING UP NEXT" lines), do NOT extract the set-up. The clarified statement is what they mean, and it will be checked on its own.
 - "t": the number in square brackets on the sentence where the claim STARTS.
 - At most {{MAX_CLAIMS}} claims. Never invent claims that are not in the transcript.
 
 "speaker_concepts": list the names of any metaphors, characters, analogies, or made-up frameworks the speaker uses in this chunk (e.g. "Instant Gratification Monkey", "Dark Playground", "Panic Monster"). Use an empty list if there are none. This list is passed to later chunks so they understand the context.`,
 
-  // {{TITLE}}, {{CHANNEL}}, {{RANGE}}, {{CONCEPTS}}, {{CONTEXT}}, {{TRANSCRIPT}} are filled in automatically.
+  // {{TITLE}}, {{CHANNEL}}, {{RANGE}}, {{CONCEPTS}}, {{CONTEXT}}, {{TRANSCRIPT}}, {{AFTER}} are filled in automatically.
   claimDetectionUser: `Video title: {{TITLE}}
 Channel: {{CHANNEL}}
 This chunk covers {{RANGE}} of the video.
@@ -81,7 +82,10 @@ EARLIER IN THE VIDEO (context only — do NOT extract claims from these lines):
 {{CONTEXT}}
 
 TRANSCRIPT TO CHECK:
-{{TRANSCRIPT}}`,
+{{TRANSCRIPT}}
+
+COMING UP NEXT (context only — do NOT extract claims from these lines; use them to understand what the speaker means):
+{{AFTER}}`,
 
   // --------------------------------------------------------------------------
   //  2. TRIAGE  (uses the "Verdict model" from settings, no web search)
