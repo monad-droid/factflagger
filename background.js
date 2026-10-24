@@ -177,9 +177,10 @@ const CLAIMS_SCHEMA = {
         required: ['t', 'claim', 'quote', 'checkworthiness'],
         additionalProperties: false
       }
-    }
+    },
+    speaker_concepts: { type: 'array', items: { type: 'string' } }
   },
-  required: ['claims'],
+  required: ['claims', 'speaker_concepts'],
   additionalProperties: false
 };
 
@@ -187,7 +188,9 @@ function fill(template, values) {
   return template.replace(/\{\{(\w+)\}\}/g, (_, k) => (k in values ? String(values[k]) : ''));
 }
 
-async function detectClaimsInChunk(chunk, meta, settings, onWait) {
+// `concepts` is the running list of the speaker's own metaphors/characters
+// (e.g. "Instant Gratification Monkey"), shared across chunks of one video.
+async function detectClaimsInChunk(chunk, meta, settings, concepts, onWait) {
   const P = self.FACTFLAG_PROMPTS;
   const asLines = (list) => list.map((s) => `[${Math.floor(s.start)}] ${s.text}`).join('\n');
   const transcript = asLines(chunk.sentences);
@@ -200,6 +203,7 @@ async function detectClaimsInChunk(chunk, meta, settings, onWait) {
       TITLE: meta.title || 'unknown',
       CHANNEL: meta.channel || 'unknown',
       RANGE: `${fmtTime(chunk.start)}–${fmtTime(chunk.end)}`,
+      CONCEPTS: concepts.size ? [...concepts].join('; ') : '(none yet)',
       CONTEXT: context,
       TRANSCRIPT: transcript
     }),
@@ -213,13 +217,25 @@ async function detectClaimsInChunk(chunk, meta, settings, onWait) {
       `(prompt ${usage.prompt_tokens}, completion ${usage.completion_tokens})`);
   }
 
+  for (const name of Array.isArray(json.speaker_concepts) ? json.speaker_concepts : []) {
+    const clean = String(name || '').trim();
+    if (clean && clean.length <= 60) concepts.add(clean);
+  }
+  // Backstop: drop claims that are really about one of the speaker's own
+  // metaphors. Only multi-word names, so a vague one like "brain" can't
+  // wipe out real claims.
+  const aboutConcept = (c) => [...concepts].some((name) =>
+    name.split(/\s+/).length >= 2 && c.claim.toLowerCase().includes(name.toLowerCase()));
+
   const claims = Array.isArray(json.claims) ? json.claims : [];
   const valid = claims.filter((c) => c && typeof c.claim === 'string' && c.claim.trim());
   // Drop claims outside this chunk (e.g. taken from the context lines by mistake).
   const inChunk = (c) => Number(c.t) >= Math.floor(chunk.start) && Number(c.t) <= chunk.end;
-  const kept = valid.filter((c) => inChunk(c) && Number(c.checkworthiness) >= P.minCheckworthiness);
+  const kept = valid.filter((c) =>
+    inChunk(c) && Number(c.checkworthiness) >= P.minCheckworthiness && !aboutConcept(c));
   if (valid.length !== kept.length) {
-    console.info(LOG, `chunk ${fmtTime(chunk.start)}: dropped ${valid.length - kept.length} claim(s) (low score or outside this section)`);
+    console.info(LOG, `chunk ${fmtTime(chunk.start)}: dropped ${valid.length - kept.length} claim(s) ` +
+      '(low score, outside this section, or about the speaker\'s own metaphors)');
   }
   return kept
     .sort((a, b) => b.checkworthiness - a.checkworthiness)
@@ -304,15 +320,17 @@ function isFatal(e) {
 
 async function detectLoop(job, state, chunks, meta, settings) {
   const pending = new Set(chunks);
+  const concepts = new Set();
   let nextId = 1;
   while (pending.size && !job.cancelled) {
     const chunk = pickNearest(pending, job.playhead, (c) => c.start, (c) => c.end);
     pending.delete(chunk);
-    const found = await detectClaimsInChunk(chunk, meta, settings, (secs) => {
+    const found = await detectClaimsInChunk(chunk, meta, settings, concepts, (secs) => {
       state.note = `Groq rate limit — waiting ${secs}s`;
       saveState(state);
     });
     if (job.cancelled) return;
+    if (concepts.size) console.info(LOG, `speaker's own concepts so far: ${[...concepts].join('; ')}`);
     for (const c of found) state.claims.push({ id: nextId++, status: 'pending', ...c });
     state.claims.sort((a, b) => a.t - b.t);
     state.chunksDone++;

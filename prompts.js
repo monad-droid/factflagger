@@ -31,7 +31,7 @@ A claim qualifies ONLY if ALL of these are true:
 
 DO NOT extract any of these — they are NOT claims:
 - the speaker's personal stories and experiences ("I wrote my thesis in 72 hours", "my friend did X") — no one else can verify them
-- metaphors, characters, analogies, and made-up models the speaker uses to explain ideas (e.g. "there's a monkey in your brain")
+- metaphors, characters, analogies, and made-up models the speaker uses to explain ideas (e.g. "there's a monkey in your brain"), and ANY statement about them — even if it sounds factual ("the monkey has no memory of the past" is about a metaphor, not the real world)
 - descriptions of the speaker's own slides, drawings, or of what happens in the video
 - jokes, sarcasm, and exaggeration for comic effect — if the audience is laughing, be extra skeptical
 - opinions, value judgments, advice, and generalizations about people ("everyone procrastinates", "we all have a deadline")
@@ -54,13 +54,18 @@ Output rules:
 - "quote": the speaker's exact words, copied from the transcript (shorten with "..." if long).
 - Read each sentence in full, together with the sentences around it, before deciding. A claim must be judged by what the speaker actually says in the complete sentence, not a fragment.
 - "t": the number in square brackets on the sentence where the claim STARTS.
-- At most {{MAX_CLAIMS}} claims. Never invent claims that are not in the transcript.`,
+- At most {{MAX_CLAIMS}} claims. Never invent claims that are not in the transcript.
 
-  // {{TITLE}}, {{CHANNEL}}, {{RANGE}}, {{CONTEXT}}, {{TRANSCRIPT}} are filled in automatically.
+"speaker_concepts": list the names of any metaphors, characters, analogies, or made-up frameworks the speaker uses in this chunk (e.g. "Instant Gratification Monkey", "Dark Playground", "Panic Monster"). Use an empty list if there are none. This list is passed to later chunks so they understand the context.`,
+
+  // {{TITLE}}, {{CHANNEL}}, {{RANGE}}, {{CONCEPTS}}, {{CONTEXT}}, {{TRANSCRIPT}} are filled in automatically.
   claimDetectionUser: `Video title: {{TITLE}}
 Channel: {{CHANNEL}}
 This chunk covers {{RANGE}} of the video.
 Each line is one sentence and starts with [seconds from the start of the video].
+
+THE SPEAKER'S OWN METAPHORS / CHARACTERS SO FAR (statements about these are NOT factual claims):
+{{CONCEPTS}}
 
 EARLIER IN THE VIDEO (context only — do NOT extract claims from these lines):
 {{CONTEXT}}
