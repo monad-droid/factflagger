@@ -135,21 +135,6 @@ self.FactFlagOverlay = (() => {
       ? 'Showing each claim right after it is said. Click to show all claims found so far.'
       : 'Showing all claims found so far. Click to show them live, as they are said.';
     live.addEventListener('click', () => chrome.storage.local.set({ liveList: !liveList }));
-    const auto = document.createElement('button');
-    auto.className = `factflag-live${autoOpenList ? ' on' : ''}`;
-    auto.textContent = autoOpenList ? 'Auto-open' : 'Auto-open: off';
-    auto.title = autoOpenList
-      ? 'Each claim pops up for 10 seconds right after it is said. Click to pop up only FALSE claims.'
-      : 'Only FALSE claims pop up for 10 seconds. Click to pop up every claim.';
-    auto.addEventListener('click', () => chrome.storage.local.set({ autoOpenList: !autoOpenList }));
-    const glow = document.createElement('button');
-    glow.className = `factflag-live${glowMode ? ' on' : ''}`;
-    glow.textContent = glowMode ? 'Glow' : 'Glow: off';
-    glow.title = glowMode
-      ? 'Glow mode: the video edge glows in the verdict colour instead of a pop-up. Click to turn off.'
-      : 'Click for glow mode: the video edge glows in the verdict colour instead of a pop-up.';
-    glow.addEventListener('click', () => chrome.storage.local.set({ glowMode: !glowMode }));
-    // In glow mode nothing pops up, so Auto-open doesn't apply.
     head.append(live, ...(glowMode ? [] : [auto]), glow);
     const close = document.createElement('button');
     close.className = 'factflag-card-close';
