@@ -60,7 +60,6 @@
       usage limits (on Plus, a five-hour limit shared with your other ChatGPT plan use). When a limit is hit,
       requests simply stop — OpenAI doesn't charge extra unless you turn on "use credits after plan limits" for
       FactFlag in <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener">ChatGPT settings → Usage</a>.
-      For now this is a test only: video checking still uses Groq + Tavily.
     </p>
     <p id="cgStatus" class="note">Checking…</p>
     <div class="actions">
@@ -68,7 +67,9 @@
       <button type="button" id="cgSignOut" hidden>Sign out of ChatGPT</button>
     </div>
     <div id="cgModelRow" hidden>
-      <label for="cgModel">ChatGPT model</label>
+      <label for="cgFastModel">Claim-finding model (runs every minute of video — a cheap model like Luna saves allowance)</label>
+      <select id="cgFastModel"></select>
+      <label for="cgModel">Verdict model (screening, web-search verdicts, second check)</label>
       <select id="cgModel"></select>
       <div class="actions">
         <button type="button" id="cgTest">Test ChatGPT (one fact-check with web search)</button>

@@ -161,8 +161,8 @@ function fill(template, values) {
 // role 'fast' = claim finding (Groq: detection model); 'strong' = everything else.
 async function aiJson(settings, role, { system, user, schemaName, schema, reasoningEffort, onWait, webSearch }) {
   if (settings.provider === 'chatgpt') {
-    const r = await chatgptJson({ system, user, schemaName, schema, reasoningEffort, webSearch });
-    recordChatGPTCall(r.usage);
+    const r = await chatgptJson({ system, user, schemaName, schema, reasoningEffort, webSearch, role });
+    recordChatGPTCall(r.usage, schemaName, r.model);
     return r;
   }
   const model = role === 'fast' ? settings.detectionModel : settings.verdictModel;
@@ -903,7 +903,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     CHATGPT_SIGN_IN: () => chatgptSignIn(),
     CHATGPT_SIGN_OUT: () => chatgptSignOut(),
     CHATGPT_MODELS: () => chatgptModels(),
-    CHATGPT_SET_MODEL: () => chatgptSetModel(msg.model),
+    CHATGPT_SET_MODEL: () => chatgptSetModel(msg.model, msg.which),
     CHATGPT_TEST: () => chatgptTest()
   };
   if (chatgptActions[msg?.type]) {

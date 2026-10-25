@@ -74,20 +74,28 @@ async function loadChatGPT() {
     : `Signed in as ${st.email || 'your ChatGPT account'}, but plan use wasn't allowed. Sign out and sign in again, and allow it.`;
   if (!st.planEnabled) return;
   const m = await cg('CHATGPT_MODELS');
-  const select = $('cgModel');
-  select.textContent = '';
   if (!m?.ok) {
     $('cgStatus').textContent += ` (Couldn't list models: ${m?.error})`;
     return;
   }
-  for (const model of m.result) {
-    const opt = document.createElement('option');
-    opt.value = model.slug;
-    opt.textContent = model.name;
-    select.appendChild(opt);
-  }
-  if (st.model && m.result.some((x) => x.slug === st.model)) select.value = st.model;
-  else if (m.result[0]) await cg('CHATGPT_SET_MODEL', { model: m.result[0].slug });
+  const fill = (select, current, fallback, which) => {
+    select.textContent = '';
+    for (const model of m.result) {
+      const opt = document.createElement('option');
+      opt.value = model.slug;
+      opt.textContent = model.name;
+      select.appendChild(opt);
+    }
+    if (current && m.result.some((x) => x.slug === current)) select.value = current;
+    else if (fallback) {
+      select.value = fallback.slug;
+      return cg('CHATGPT_SET_MODEL', { model: fallback.slug, which });
+    }
+  };
+  await fill($('cgModel'), st.model, m.result[0], 'model');
+  // Default claim finding to the first "Luna" model listed (the cheapest tier).
+  const luna = m.result.find((x) => /luna/i.test(`${x.slug} ${x.name}`)) || m.result[0];
+  await fill($('cgFastModel'), st.fastModel, luna, 'fastModel');
 }
 
 $('cgSignIn').addEventListener('click', async () => {
@@ -105,6 +113,8 @@ $('cgSignOut').addEventListener('click', async () => {
   }
 });
 $('cgModel').addEventListener('change', () => cg('CHATGPT_SET_MODEL', { model: $('cgModel').value }));
+$('cgFastModel').addEventListener('change', () =>
+  cg('CHATGPT_SET_MODEL', { model: $('cgFastModel').value, which: 'fastModel' }));
 $('cgTest').addEventListener('click', async () => {
   const out = $('cgResult');
   out.hidden = false;
@@ -158,6 +168,43 @@ function meter(label, left, total, detail) {
 
 const fmt = (n) => Number(n).toLocaleString();
 
+// OpenAI's credit rates per 1M tokens (input, cached input, output), from
+// developers.openai.com/codex/pricing. Used only to compare steps with each
+// other; OpenAI says included plan usage isn't set by these rates alone.
+const CREDIT_RATES = {
+  gpt61sol: [50, 2.5, 250], gpt6sol: [50, 5, 250], gpt6astra: [250, 25, 1250], gpt6luna: [2.5, 0.25, 12.5],
+  gpt56sol: [100, 10, 500], gpt56terra: [50, 5, 300], gpt56luna: [5, 0.5, 30]
+};
+const STEP_NAMES = { claims: 'Finding claims', triage: 'Screening', verdict: 'Verdicts (web search)', contradiction: 'Second check' };
+
+function chatgptBreakdown(steps) {
+  const credits = (x) => {
+    const r = CREDIT_RATES[String(x.model).toLowerCase().replace(/[^a-z0-9]/g, '')];
+    if (!r) return NaN;
+    return ((x.input - x.cached) * r[0] + x.cached * r[1] + x.output * r[2]) / 1e6;
+  };
+  const rows = steps.map((x) => ({ ...x, credits: credits(x) }));
+  const total = rows.reduce((t, x) => t + (Number.isFinite(x.credits) ? x.credits : 0), 0);
+  const table = document.createElement('table');
+  table.className = 'steps';
+  const head = table.insertRow();
+  for (const h of ['Step', 'Model', 'Requests', 'Tokens in / out', 'Share of usage (est.)']) {
+    const th = document.createElement('th');
+    th.textContent = h;
+    head.appendChild(th);
+  }
+  rows.sort((a, b) => (b.credits || 0) - (a.credits || 0));
+  for (const x of rows) {
+    const tr = table.insertRow();
+    const share = Number.isFinite(x.credits) && total ? `${Math.round((x.credits / total) * 100)}%` : 'unknown model';
+    for (const v of [STEP_NAMES[x.step] || x.step, x.model, fmt(x.requests),
+      `${fmt(x.input)} / ${fmt(x.output)}`, share]) {
+      tr.insertCell().textContent = v;
+    }
+  }
+  return table;
+}
+
 async function loadBudget() {
   const box = $('budget');
   const s = { ...D, ...(await chrome.storage.local.get(Object.keys(D))) };
@@ -167,6 +214,8 @@ async function loadBudget() {
   if (budget?.chatgpt?.requests) {
     box.appendChild(meter('ChatGPT plan — requests by FactFlag today', NaN, NaN,
       `${fmt(budget.chatgpt.requests)} (your plan's remaining allowance is at chatgpt.com/settings/usage)`));
+    const steps = Object.values(budget.chatgpt.steps || {});
+    if (steps.length) box.appendChild(chatgptBreakdown(steps));
   }
   const t = budget?.tavily;
   if (t && t.used !== null && t.limit !== null) {
