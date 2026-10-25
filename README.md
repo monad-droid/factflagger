@@ -9,7 +9,7 @@ A Brave/Chrome extension (Manifest V3) that fact-checks YouTube videos and flags
 - *Triage:* before searching, the verdict model screens each claim; ones it is highly confident are true aren't searched. Turn off with `triageEnabled: false` in `prompts.js`.
 - *Budget meter:* the toolbar badge shows Tavily searches left this month; the settings page shows Tavily and Groq usage.
 
-**Click the status line** on the video to open a list of every claim checked so far — verdict, explanation, source, and why a claim was *not* flagged. Click a time to jump there. Every verdict is also printed in the YouTube console (filter by `FactFlag`).
+**Click the status line** on the video to open a list of every claim checked so far — verdict, explanation, source, and why a claim was *not* flagged. Click a time to jump there. With **Live** on (the default; toggle it in the list's header or on the settings page), the list fills in as you watch: each claim appears right after it's said, newest on top, with a short highlight. Every verdict is also printed in the YouTube console (filter by `FactFlag`).
 
 ## Tweaking the AI prompts
 

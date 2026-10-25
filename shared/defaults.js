@@ -7,6 +7,9 @@ self.FACTFLAG_DEFAULTS = {
   provider: 'chatgpt',
   // Play a short sound when a FALSE-claim card pops up.
   soundEnabled: true,
+  // Claims list fills in live (each claim appears right after it's said);
+  // off = show every claim found so far, including ones ahead.
+  liveList: true,
   groqApiKey: '',
   tavilyApiKey: '',
   // Fast model: finds checkable claims in transcript chunks.

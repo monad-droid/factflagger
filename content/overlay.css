@@ -113,3 +113,15 @@
 .factflag-list-claim { font-weight: 500; }
 .factflag-list-why { margin-top: 2px; font-size: 12px; opacity: 0.8; }
 .factflag-list a { color: #8ab4f8; }
+
+/* A claim that was just said: flash in. */
+.factflag-list-new { animation: factflag-new 2.5s ease-out; }
+@keyframes factflag-new {
+  from { background: rgba(255, 213, 79, 0.28); }
+  to { background: transparent; }
+}
+
+.factflag-live { margin-left: auto; margin-right: 8px; background: none; border: 1px solid rgba(255,255,255,0.3);
+  color: #ccc; border-radius: 10px; padding: 1px 8px; font-size: 11px; cursor: pointer; }
+.factflag-live.on { color: #ff5252; border-color: #ff5252; }
+.factflag-live + .factflag-card-close { margin-left: 0; }

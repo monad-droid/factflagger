@@ -45,6 +45,22 @@ self.FactFlagOverlay = (() => {
   // ---- List of every checked claim (opened by clicking the status line) ----
   let allClaims = [];
   let listOpen = false;
+  // The list fills in live: a claim appears once the speaker finishes saying
+  // it, like the alert card. Ids already shown, so new rows can be highlighted.
+  let shownIds = new Set();
+  let shownKey = '';
+  let liveList = self.FACTFLAG_DEFAULTS.liveList;
+  chrome.storage.local.get('liveList').then((s) => {
+    if (typeof s.liveList === 'boolean') liveList = s.liveList;
+    if (listOpen) renderList();
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !changes.liveList) return;
+    liveList = !!changes.liveList.newValue;
+    shownKey = '';
+    if (listOpen) renderList();
+  });
+  const heard = (c) => !liveList || (video()?.currentTime || 0) >= (c.tEnd || c.t) + 0.5;
   let listEl = null;
 
   const VERDICT_LABELS = {
@@ -68,6 +84,7 @@ self.FactFlagOverlay = (() => {
 
   function toggleList() {
     listOpen = !listOpen;
+    shownKey = '';
     renderStatus();
     renderList();
   }
@@ -88,7 +105,19 @@ self.FactFlagOverlay = (() => {
 
     const head = document.createElement('div');
     head.className = 'factflag-list-head';
-    head.append(line('factflag-list-title', `Claims checked so far (${allClaims.length})`));
+    const visible = allClaims.filter(heard);
+    const ahead = allClaims.length - visible.length;
+    head.append(line('factflag-list-title', liveList
+      ? `Claims heard so far (${visible.length})${ahead ? ` · ${ahead} lined up ahead` : ''}`
+      : `Claims found so far (${visible.length})`));
+    const live = document.createElement('button');
+    live.className = `factflag-live${liveList ? ' on' : ''}`;
+    live.textContent = liveList ? '● Live' : 'Live: off';
+    live.title = liveList
+      ? 'Showing each claim right after it is said. Click to show all claims found so far.'
+      : 'Showing all claims found so far. Click to show them live, as they are said.';
+    live.addEventListener('click', () => chrome.storage.local.set({ liveList: !liveList }));
+    head.appendChild(live);
     const close = document.createElement('button');
     close.className = 'factflag-card-close';
     close.setAttribute('aria-label', 'Close');
@@ -99,13 +128,17 @@ self.FactFlagOverlay = (() => {
 
     const body = document.createElement('div');
     body.className = 'factflag-list-body';
-    if (!allClaims.length) {
-      body.appendChild(line('factflag-list-empty', 'No checkable claims yet. FactFlag checks about a minute ahead of where you are.'));
+    if (!visible.length) {
+      body.appendChild(line('factflag-list-empty', liveList
+        ? 'No claims heard yet. Each claim shows up here right after it is said.'
+        : 'No checkable claims yet. FactFlag checks about a minute ahead of where you are.'));
     }
+    const firstRender = !shownKey;
     // Latest moment in the video first.
-    for (const c of [...allClaims].sort((a, b) => b.t - a.t)) {
+    for (const c of visible.sort((a, b) => b.t - a.t)) {
       const row = document.createElement('div');
       row.className = 'factflag-list-row';
+      if (liveList && !firstRender && !shownIds.has(c.id)) row.classList.add('factflag-list-new');
       const top = document.createElement('div');
       top.className = 'factflag-list-top';
       const time = document.createElement('button');
@@ -137,7 +170,18 @@ self.FactFlagOverlay = (() => {
     listEl.appendChild(body);
     p.appendChild(listEl);
     body.scrollTop = keepScroll;
+    shownIds = new Set(visible.map((c) => c.id));
+    shownKey = listKey();
   }
+
+  function listKey() {
+    return allClaims.filter(heard).map((c) => c.id).join(',') || 'none';
+  }
+  // Add rows as playback reaches the end of each claim (and drop them again
+  // after seeking back). timeupdate doesn't bubble, so listen in capture.
+  document.addEventListener('timeupdate', (e) => {
+    if (listOpen && e.target === video() && listKey() !== shownKey) renderList();
+  }, true);
 
   function hideTip() {
     tipEl?.remove();

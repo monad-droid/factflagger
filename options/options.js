@@ -12,12 +12,13 @@ async function load() {
   for (const f of FIELDS) $(f).value = s[f] || '';
   $('enabled').checked = !!s.enabled;
   $('soundEnabled').checked = !!s.soundEnabled;
+  $('liveList').checked = !!s.liveList;
   $('provider').value = s.provider || 'chatgpt';
   updateProviderNote();
 }
 
 async function save() {
-  const values = { enabled: $('enabled').checked, soundEnabled: $('soundEnabled').checked, provider: $('provider').value };
+  const values = { enabled: $('enabled').checked, soundEnabled: $('soundEnabled').checked, liveList: $('liveList').checked, provider: $('provider').value };
   for (const f of FIELDS) values[f] = $(f).value.trim();
   if (!values.detectionModel) values.detectionModel = D.detectionModel;
   if (!values.verdictModel) values.verdictModel = D.verdictModel;
@@ -267,6 +268,7 @@ $('resetModels').addEventListener('click', () => {
 });
 $('enabled').addEventListener('change', save);
 $('soundEnabled').addEventListener('change', save);
+$('liveList').addEventListener('change', save);
 $('provider').addEventListener('change', () => { updateProviderNote(); save(); });
 
 function updateProviderNote() {
