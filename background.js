@@ -157,6 +157,22 @@ function fill(template, values) {
   return template.replace(/\{\{(\w+)\}\}/g, (_, k) => (k in values ? String(values[k]) : ''));
 }
 
+// One structured AI request, on whichever provider is selected in settings.
+// role 'fast' = claim finding (Groq: detection model); 'strong' = everything else.
+async function aiJson(settings, role, { system, user, schemaName, schema, reasoningEffort, onWait, webSearch }) {
+  if (settings.provider === 'chatgpt') {
+    const r = await chatgptJson({ system, user, schemaName, schema, reasoningEffort, webSearch });
+    recordChatGPTCall(r.usage);
+    return r;
+  }
+  const model = role === 'fast' ? settings.detectionModel : settings.verdictModel;
+  const r = await groqChatJson({
+    apiKey: settings.groqApiKey, model, system, user, schemaName, schema, reasoningEffort, onWait
+  });
+  recordGroqCall(model, r.usage, r.limits);
+  return r;
+}
+
 // When the claim has been fully said: the end of the sentence it starts in, or
 // of later sentences too if the speaker's quoted words run longer than that.
 function claimEnd(chunk, firstSentence, quote) {
@@ -179,9 +195,7 @@ async function detectClaimsInChunk(chunk, meta, settings, concepts, onWait) {
   const transcript = asLines(chunk.sentences);
   const context = chunk.context.length ? asLines(chunk.context) : '(start of video)';
   const after = chunk.after.length ? asLines(chunk.after) : '(end of video)';
-  const { json, usage, limits } = await groqChatJson({
-    apiKey: settings.groqApiKey,
-    model: settings.detectionModel,
+  const { json, usage } = await aiJson(settings, 'fast', {
     system: fill(P.claimDetectionSystem, { MAX_CLAIMS: P.maxClaimsPerChunk }),
     user: fill(P.claimDetectionUser, {
       TITLE: meta.title || 'unknown',
@@ -197,8 +211,7 @@ async function detectClaimsInChunk(chunk, meta, settings, concepts, onWait) {
     reasoningEffort: P.detectionReasoningEffort,
     onWait
   });
-  recordGroqCall(settings.detectionModel, usage, limits);
-  if (usage) {
+  if (usage?.total_tokens !== undefined && usage?.prompt_tokens !== undefined) {
     console.info(LOG, `chunk ${fmtTime(chunk.start)}: ${usage.total_tokens} tokens, ${usage.prompt_tokens_details?.cached_tokens || 0} cached ` +
       `(prompt ${usage.prompt_tokens}, completion ${usage.completion_tokens})`);
   }
@@ -264,6 +277,7 @@ const VERDICT_SCHEMA = {
 };
 
 async function verifyClaim(claim, meta, settings, onWait) {
+  if (settings.provider === 'chatgpt') return verifyClaimWithChatGPT(claim, meta, settings, onWait);
   const P = self.FACTFLAG_PROMPTS;
   const results = await tavilySearch({
     apiKey: settings.tavilyApiKey,
@@ -279,9 +293,7 @@ async function verifyClaim(claim, meta, settings, onWait) {
     `[${i + 1}] ${r.title}\nURL: ${r.url}${r.published ? `\nPublished: ${r.published}` : ''}\n${r.content}`
   ).join('\n\n');
 
-  const { json, usage, limits } = await groqChatJson({
-    apiKey: settings.groqApiKey,
-    model: settings.verdictModel,
+  const { json, usage } = await aiJson(settings, 'strong', {
     system: P.verdictSystem,
     user: fill(P.verdictUser, {
       TITLE: meta.title || 'unknown',
@@ -295,7 +307,6 @@ async function verifyClaim(claim, meta, settings, onWait) {
     reasoningEffort: P.verdictReasoningEffort,
     onWait
   });
-  recordGroqCall(settings.verdictModel, usage, limits);
   if (usage) {
     console.info(LOG, `verdict ${fmtTime(claim.t)}: ${usage.total_tokens} tokens, ${usage.prompt_tokens_details?.cached_tokens || 0} cached ` +
       `(prompt ${usage.prompt_tokens}, completion ${usage.completion_tokens})`);
@@ -336,6 +347,66 @@ async function verifyClaim(claim, meta, settings, onWait) {
   };
 }
 
+// ChatGPT-plan verdict: the model searches the web itself (search is forced).
+// OpenAI returns links but not page text, so instead of finding the quote in
+// the page, we require the source to be one of the pages the search returned.
+async function verifyClaimWithChatGPT(claim, meta, settings, onWait) {
+  const P = self.FACTFLAG_PROMPTS;
+  const r = await aiJson(settings, 'strong', {
+    system: `${P.verdictSystem}\n\n${P.verdictWebSearchNote}`,
+    user: fill(P.verdictUserWebSearch, {
+      TITLE: meta.title || 'unknown',
+      PUBLISHED: meta.published || 'unknown',
+      CLAIM: claim.claim,
+      QUOTE: claim.quote
+    }),
+    schemaName: 'verdict',
+    schema: VERDICT_SCHEMA,
+    reasoningEffort: P.verdictReasoningEffort,
+    webSearch: true,
+    onWait
+  });
+  const json = r.json;
+  console.info(LOG, `verdict ${fmtTime(claim.t)}: ChatGPT ${r.model} took ${(r.ms / 1000).toFixed(1)}s, ` +
+    `${r.citations.length} page(s) found by search`);
+
+  let verdict = ['TRUE', 'FALSE', 'MISLEADING', 'UNVERIFIABLE'].includes(json.verdict) ? json.verdict : 'UNVERIFIABLE';
+  let explanation = stripMarkdownLinks(json.explanation);
+  const evidenceQuote = String(json.evidence_quote || '').trim();
+  const source = r.citations.find((c) => sameUrl(c.url, json.source_url));
+
+  if (verdict === 'FALSE' || verdict === 'MISLEADING') {
+    let reason = '';
+    if (!r.citations.length) reason = 'the web search returned no pages FactFlag could check';
+    else if (!source) reason = 'its source was not one of the pages the search returned';
+    else if (ABSENCE_OF_EVIDENCE.test(explanation)) reason = 'the evidence only says the claim is unproven, not that it is false';
+    else if (evidenceQuote.replace(/[^a-z0-9]/gi, '').length < 15) reason = 'no supporting quote from the source';
+    if (reason) {
+      console.info(LOG, `verdict ${fmtTime(claim.t)}: ${verdict} downgraded to UNVERIFIABLE — ${reason}`);
+      verdict = 'UNVERIFIABLE';
+      explanation = `${explanation} (Not flagged: ${reason}.)`;
+    }
+  }
+  if (verdict === 'FALSE') {
+    const check = await confirmContradiction(claim, evidenceQuote, settings, onWait);
+    if (check.answer !== 'yes') {
+      console.info(LOG, `verdict ${fmtTime(claim.t)}: FALSE downgraded to UNVERIFIABLE — second check said ` +
+        `"${check.answer}": ${check.reason}`);
+      verdict = 'UNVERIFIABLE';
+      explanation = `${explanation} (Not flagged: a second check found the source doesn't directly contradict ` +
+        `the claim — ${check.reason})`;
+    }
+  }
+  const shownUrl = source?.url || (verdict === 'TRUE' ? json.source_url : '');
+  return {
+    verdict,
+    explanation,
+    evidenceQuote: verdict === 'UNVERIFIABLE' ? '' : evidenceQuote,
+    sourceUrl: shownUrl ? cleanUrl(shownUrl) : '',
+    sourceTitle: source?.title || ''
+  };
+}
+
 const CONTRADICTION_SCHEMA = {
   type: 'object',
   properties: {
@@ -351,9 +422,7 @@ const CONTRADICTION_SCHEMA = {
 async function confirmContradiction(claim, evidenceQuote, settings, onWait) {
   const P = self.FACTFLAG_PROMPTS;
   try {
-    const { json, usage, limits } = await groqChatJson({
-      apiKey: settings.groqApiKey,
-      model: settings.verdictModel,
+    const { json } = await aiJson(settings, 'strong', {
       system: P.contradictionSystem,
       user: fill(P.contradictionUser, { CLAIM: claim.claim, QUOTE: claim.quote, EVIDENCE: evidenceQuote }),
       schemaName: 'contradiction',
@@ -361,7 +430,6 @@ async function confirmContradiction(claim, evidenceQuote, settings, onWait) {
       reasoningEffort: P.contradictionReasoningEffort,
       onWait
     });
-    recordGroqCall(settings.verdictModel, usage, limits);
     const answer = ['yes', 'no', 'unclear'].includes(json.contradicts) ? json.contradicts : 'unclear';
     return { answer, reason: String(json.reason || '').trim() || 'no reason given' };
   } catch (e) {
@@ -426,9 +494,7 @@ async function triageClaims(claims, meta, settings, onWait) {
   const list = claims
     .map((c) => `[${c.id}] (${fmtTime(c.t)}) ${c.claim}\n    Speaker's words: "${c.quote}"`)
     .join('\n');
-  const { json, usage, limits } = await groqChatJson({
-    apiKey: settings.groqApiKey,
-    model: settings.verdictModel,
+  const { json } = await aiJson(settings, 'strong', {
     system: P.triageSystem,
     user: fill(P.triageUser, {
       TITLE: meta.title || 'unknown',
@@ -440,7 +506,6 @@ async function triageClaims(claims, meta, settings, onWait) {
     reasoningEffort: P.triageReasoningEffort,
     onWait
   });
-  recordGroqCall(settings.verdictModel, usage, limits);
 
   const byId = new Map((Array.isArray(json.results) ? json.results : []).map((r) => [Number(r.id), r]));
   for (const c of claims) {
@@ -465,7 +530,7 @@ async function triageClaims(claims, meta, settings, onWait) {
 const BEHIND_SLACK_SECONDS = 15; // a claim that started a moment ago is still being heard
 const MIN_LEAD_SECONDS = 10;     // a verdict ready with less time to spare than this is "too close"
 const LEAD_STEP_SECONDS = 15;    // how much to widen the window when that happens
-const STATE_VERSION = 7; // bump when the saved format, chunking or prompts change
+const STATE_VERSION = 8; // bump when the saved format, chunking or prompts change
 
 const videoKey = (videoId) => `video:${videoId}`;
 const transcriptKey = (videoId) => `transcript:${videoId}`;
@@ -605,9 +670,19 @@ async function runJob(job) {
   };
   try {
     const settings = await getSettings();
-    if (!settings.groqApiKey) throw Object.assign(new Error('Add your Groq API key in FactFlag settings.'), { fatal: true });
-    if (!settings.tavilyApiKey) throw Object.assign(new Error('Add your Tavily API key in FactFlag settings.'), { fatal: true });
-    refreshTavilyUsage(settings.tavilyApiKey, false).catch(() => {});
+    if (settings.provider === 'chatgpt') {
+      const st = await chatgptStatus();
+      if (!st.signedIn) {
+        throw Object.assign(new Error('Sign in with ChatGPT in FactFlag settings (or switch to Groq + Tavily keys).'), { fatal: true });
+      }
+      if (!st.planEnabled) {
+        throw Object.assign(new Error('Allow FactFlag to use your ChatGPT plan: sign out and sign in again in settings.'), { fatal: true });
+      }
+    } else {
+      if (!settings.groqApiKey) throw Object.assign(new Error('Add your Groq API key in FactFlag settings.'), { fatal: true });
+      if (!settings.tavilyApiKey) throw Object.assign(new Error('Add your Tavily API key in FactFlag settings.'), { fatal: true });
+      refreshTavilyUsage(settings.tavilyApiKey, false).catch(() => {});
+    }
 
     while (!job.cancelled) {
       const work = nextWork(job);

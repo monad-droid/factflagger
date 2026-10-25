@@ -20,6 +20,13 @@
       <button type="button" id="testSound">Test sound</button>
     </div>
 
+    <label for="provider">Check videos using</label>
+    <select id="provider">
+      <option value="chatgpt">My ChatGPT plan (sign in below — no keys needed)</option>
+      <option value="groq">Groq + Tavily API keys</option>
+    </select>
+    <p class="note" id="providerNote"></p>
+
     <label for="groqApiKey">Groq API key</label>
     <div class="row">
       <input type="password" id="groqApiKey" autocomplete="off" spellcheck="false" placeholder="gsk_…">

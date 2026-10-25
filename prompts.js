@@ -191,6 +191,19 @@ Speaker's exact words: "{{QUOTE}}"
 
 QUOTE FROM THE SOURCE: "{{EVIDENCE}}"`,
 
+  // Added to the verdict instructions when checking with the ChatGPT plan,
+  // which searches the web itself instead of being handed Tavily results.
+  verdictWebSearchNote: `WEB SEARCH MODE: there are no search results pasted below. Use your web search tool to look up the claim, then treat the pages you find as "the search results" in the rules above. "source_url" must be one of the pages your search returned, and "evidence_quote" must be copied word for word from that page. Never cite a page you did not find in this search.`,
+
+  // {{TITLE}}, {{PUBLISHED}}, {{CLAIM}}, {{QUOTE}} are filled in automatically.
+  verdictUserWebSearch: `Video title: {{TITLE}}
+Video published: {{PUBLISHED}}
+
+CLAIM: {{CLAIM}}
+The speaker's exact words: "{{QUOTE}}"
+
+Search the web for evidence about this claim, then give your verdict.`,
+
   // {{TITLE}}, {{PUBLISHED}}, {{CLAIM}}, {{QUOTE}}, {{RESULTS}} are filled in automatically.
   verdictUser: `Video title: {{TITLE}}
 Video published: {{PUBLISHED}}

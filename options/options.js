@@ -12,10 +12,12 @@ async function load() {
   for (const f of FIELDS) $(f).value = s[f] || '';
   $('enabled').checked = !!s.enabled;
   $('soundEnabled').checked = !!s.soundEnabled;
+  $('provider').value = s.provider || 'chatgpt';
+  updateProviderNote();
 }
 
 async function save() {
-  const values = { enabled: $('enabled').checked, soundEnabled: $('soundEnabled').checked };
+  const values = { enabled: $('enabled').checked, soundEnabled: $('soundEnabled').checked, provider: $('provider').value };
   for (const f of FIELDS) values[f] = $(f).value.trim();
   if (!values.detectionModel) values.detectionModel = D.detectionModel;
   if (!values.verdictModel) values.verdictModel = D.verdictModel;
@@ -121,8 +123,10 @@ $('cgTest').addEventListener('click', async () => {
     t.verdict ? `Why: ${t.verdict.explanation}` : '',
     t.verdict ? `Source says: "${t.verdict.evidence_quote}"` : '',
     t.verdict ? `Source: ${t.verdict.source_url}` : '',
+    t.verdict ? `Source was among the pages the search returned: ${t.sourceFound ? 'yes' : 'NO'}` : '',
     '',
-    `Citations: ${t.citations.map((c) => c.url).join(', ') || 'none'}`
+    `Pages found by the search (${t.citations.length}):`,
+    ...t.citations.map((c) => `  ${c.url}`)
   ].filter((l, i, a) => l !== '' || a[i - 1] !== '').join('\n');
 });
 loadChatGPT();
@@ -160,6 +164,10 @@ async function loadBudget() {
   const { budget } = (await chrome.runtime.sendMessage({ type: 'GET_BUDGET' })) || {};
   box.textContent = '';
 
+  if (budget?.chatgpt?.requests) {
+    box.appendChild(meter('ChatGPT plan — requests by FactFlag today', NaN, NaN,
+      `${fmt(budget.chatgpt.requests)} (your plan's remaining allowance is at chatgpt.com/settings/usage)`));
+  }
   const t = budget?.tavily;
   if (t && t.used !== null && t.limit !== null) {
     const left = Math.max(0, t.limit - t.used - (t.searchesSinceRefresh || 0));
@@ -210,5 +218,12 @@ $('resetModels').addEventListener('click', () => {
 });
 $('enabled').addEventListener('change', save);
 $('soundEnabled').addEventListener('change', save);
+$('provider').addEventListener('change', () => { updateProviderNote(); save(); });
+
+function updateProviderNote() {
+  $('providerNote').textContent = $('provider').value === 'chatgpt'
+    ? 'Every step (finding claims, screening, web search, verdicts) runs on your ChatGPT plan. The Groq and Tavily keys below are not used.'
+    : 'Claims are checked with Groq (AI) and Tavily (web search) using the keys below.';
+}
 $('testSound').addEventListener('click', () => self.factflagDing());
 load();

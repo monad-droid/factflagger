@@ -2,6 +2,9 @@
 // API keys are never given defaults — the user enters them on the settings page.
 self.FACTFLAG_DEFAULTS = {
   enabled: true,
+  // 'chatgpt' = use the viewer's ChatGPT plan for everything (no keys needed);
+  // 'groq' = Groq + Tavily API keys.
+  provider: 'chatgpt',
   // Play a short sound when a FALSE-claim card pops up.
   soundEnabled: true,
   groqApiKey: '',

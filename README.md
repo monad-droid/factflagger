@@ -27,6 +27,10 @@ All prompts live in **`prompts.js`**. Edit it in any text editor, then reload th
 
 ## Settings
 
+**Check videos using:**
+- **My ChatGPT plan** (default) — click *Continue with ChatGPT* and allow plan use. Every step runs on your ChatGPT Plus/Pro plan, including web search; no API keys needed. Usage counts against your plan's limits (on Plus, a five-hour limit shared with your other plan use); when a limit is hit FactFlag pauses — it never switches to paid billing. Keep "use credits after plan limits" off for FactFlag at chatgpt.com/settings/usage.
+- **Groq + Tavily API keys** — the original setup, using the keys below.
+
 - **Groq API key** — from https://console.groq.com/keys
 - **Claim-detection model** (fast) — default `openai/gpt-oss-20b`
 - **Verdict model** (stronger) — default `openai/gpt-oss-120b`
