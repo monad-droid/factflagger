@@ -39,3 +39,8 @@ table.steps th, table.steps td { border: 1px solid #ddd; padding: 3px 8px; text-
 .sub label.toggle { font-weight: 400; }
 .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
 label.inline { margin: 0; font-weight: 600; }
+
+.glow-strength { width: 100%; display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.glow-strength input[type=range] { flex: 0 1 200px; }
+.glow-preview { position: relative; width: 120px; height: 68px; border-radius: 6px; overflow: hidden;
+  background: linear-gradient(135deg, #3a4a5a, #1d2630); }

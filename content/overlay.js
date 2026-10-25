@@ -58,12 +58,14 @@ self.FactFlagOverlay = (() => {
   let autoOpenList = self.FACTFLAG_DEFAULTS.autoOpenList;
   let glowMode = self.FACTFLAG_DEFAULTS.glowMode;
   let alertTiming = self.FACTFLAG_DEFAULTS.alertTiming;
+  let glowStrength = self.FACTFLAG_DEFAULTS.glowStrength;
   // Which verdicts glow, e.g. { false: true, true: false, ... }.
   const GLOW_KEYS = { false: 'glowFalse', misleading: 'glowMisleading', true: 'glowTrue', unverifiable: 'glowUnverifiable' };
   const glowOn = {};
   for (const [kind, key] of Object.entries(GLOW_KEYS)) glowOn[kind] = self.FACTFLAG_DEFAULTS[key];
-  chrome.storage.local.get(['liveList', 'autoOpenList', 'glowMode', 'alertTiming', ...Object.values(GLOW_KEYS)]).then((s) => {
+  chrome.storage.local.get(['liveList', 'autoOpenList', 'glowMode', 'alertTiming', 'glowStrength', ...Object.values(GLOW_KEYS)]).then((s) => {
     if (s.alertTiming === 'start' || s.alertTiming === 'end') alertTiming = s.alertTiming;
+    if (Number.isFinite(s.glowStrength)) glowStrength = s.glowStrength;
     if (typeof s.liveList === 'boolean') liveList = s.liveList;
     if (typeof s.autoOpenList === 'boolean') autoOpenList = s.autoOpenList;
     if (typeof s.glowMode === 'boolean') glowMode = s.glowMode;
@@ -73,6 +75,7 @@ self.FactFlagOverlay = (() => {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     for (const [kind, key] of Object.entries(GLOW_KEYS)) if (changes[key]) glowOn[kind] = !!changes[key].newValue;
+    if (changes.glowStrength && Number.isFinite(changes.glowStrength.newValue)) glowStrength = changes.glowStrength.newValue;
     if (changes.alertTiming) alertTiming = changes.alertTiming.newValue === 'start' ? 'start' : 'end';
     if (!changes.liveList && !changes.autoOpenList && !changes.glowMode) return;
     if (changes.liveList) liveList = !!changes.liveList.newValue;
@@ -488,6 +491,7 @@ self.FactFlagOverlay = (() => {
   }
 
   // ---- Glow mode ----
+
   // Most serious verdict first, so a FALSE claim said together with a TRUE
   // one glows red.
   const GLOW_ORDER = ['FALSE', 'MISLEADING', 'UNVERIFIABLE', 'TRUE'];
@@ -513,6 +517,7 @@ self.FactFlagOverlay = (() => {
     glowEl?.remove();
     glowEl = document.createElement('div');
     glowEl.className = `factflag-glow factflag-glow-${kind}`;
+    self.factflagApplyGlowStrength(glowEl, glowStrength);
     glowEl.addEventListener('animationend', () => { glowEl?.remove(); glowEl = null; });
     p.appendChild(glowEl);
   }

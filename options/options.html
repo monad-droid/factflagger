@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <title>FactFlag Settings</title>
   <link rel="stylesheet" href="options.css">
+  <!-- for the glow preview -->
+  <link rel="stylesheet" href="../content/overlay.css">
 </head>
 <body>
   <main>
@@ -26,10 +28,10 @@
       <input type="checkbox" id="autoOpenList"> Pop up each claim for 10 seconds right after it's said (off = only FALSE claims). The full list opens only when you click the status line.
     </label>
     <div class="row">
-      <label for="alertTiming" class="inline">Alert when the speaker</label>
+      <label for="alertTiming" class="inline">Alert&nbsp;at</label>
       <select id="alertTiming">
-        <option value="end">finishes the claim (verdict is surer to be ready)</option>
-        <option value="start">starts the claim</option>
+        <option value="end">the end of the claim (verdict is surer to be ready)</option>
+        <option value="start">the start of the claim</option>
       </select>
     </div>
     <label class="toggle">
@@ -41,6 +43,12 @@
       <label class="toggle"><input type="checkbox" id="glowMisleading"> <span class="swatch" style="background:#ff9f0a"></span> Misleading</label>
       <label class="toggle"><input type="checkbox" id="glowTrue"> <span class="swatch" style="background:#30d158"></span> True (and likely true)</label>
       <label class="toggle"><input type="checkbox" id="glowUnverifiable"> <span class="swatch" style="background:#64d2ff"></span> Can't tell</label>
+      <div class="glow-strength">
+        <label for="glowStrength" class="inline">Glow strength</label>
+        <input type="range" id="glowStrength" min="5" max="100" step="5">
+        <span id="glowStrengthValue" class="note"></span>
+        <div id="glowPreview" class="glow-preview" title="Preview"></div>
+      </div>
     </div>
 
     <label for="provider">Check videos using</label>

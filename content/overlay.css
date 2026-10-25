@@ -133,7 +133,8 @@
 .factflag-glow {
   position: absolute; inset: 0; z-index: 70; pointer-events: none; border-radius: inherit;
   --glow: 100, 210, 255;
-  box-shadow: inset 0 0 36px 2px rgba(var(--glow), 0.28);
+  /* --glow-alpha and --glow-blur come from the glow-strength setting. */
+  box-shadow: inset 0 0 var(--glow-blur, 36px) 2px rgba(var(--glow), var(--glow-alpha, 0.28));
   animation: factflag-glow 4s ease-in-out forwards;
 }
 .factflag-glow-false { --glow: 255, 69, 58; }

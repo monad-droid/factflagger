@@ -25,10 +25,20 @@ self.FACTFLAG_DEFAULTS = {
   glowMisleading: true,
   glowTrue: false,          // includes "likely true" claims that weren't searched
   glowUnverifiable: false,
+  // How strong the glow is, 5–100.
+  glowStrength: 40,
   groqApiKey: '',
   tavilyApiKey: '',
   // Fast model: finds checkable claims in transcript chunks.
   detectionModel: 'openai/gpt-oss-20b',
   // Stronger model: decides TRUE / FALSE / MISLEADING / UNVERIFIABLE from search results.
   verdictModel: 'openai/gpt-oss-120b'
+};
+
+// Glow strength 5–100 → how opaque and how wide the glow is (40 = default).
+// Shared by the on-video glow and the preview on the settings page.
+self.factflagApplyGlowStrength = (el, strength) => {
+  const s = Math.min(100, Math.max(5, Number(strength) || 40));
+  el.style.setProperty('--glow-alpha', (0.007 * s).toFixed(3));
+  el.style.setProperty('--glow-blur', `${Math.round(20 + 0.4 * s)}px`);
 };

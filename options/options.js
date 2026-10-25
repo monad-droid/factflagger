@@ -18,6 +18,8 @@ async function load() {
   $('autoOpenList').checked = !!s.autoOpenList;
   $('glowMode').checked = !!s.glowMode;
   $('alertTiming').value = s.alertTiming === 'start' ? 'start' : 'end';
+  $('glowStrength').value = s.glowStrength;
+  $('glowStrengthValue').textContent = `${s.glowStrength}%`;
   for (const k of GLOW_FIELDS) $(k).checked = !!s[k];
   $('glowKinds').hidden = !s.glowMode;
   $('provider').value = s.provider || 'chatgpt';
@@ -28,6 +30,7 @@ async function save() {
   const values = { enabled: $('enabled').checked, soundEnabled: $('soundEnabled').checked, liveList: $('liveList').checked, autoOpenList: $('autoOpenList').checked, glowMode: $('glowMode').checked, provider: $('provider').value };
   for (const k of GLOW_FIELDS) values[k] = $(k).checked;
   values.alertTiming = $('alertTiming').value;
+  values.glowStrength = Number($('glowStrength').value);
   for (const f of FIELDS) values[f] = $(f).value.trim();
   if (!values.detectionModel) values.detectionModel = D.detectionModel;
   if (!values.verdictModel) values.verdictModel = D.verdictModel;
@@ -281,6 +284,17 @@ $('liveList').addEventListener('change', save);
 $('autoOpenList').addEventListener('change', save);
 $('glowMode').addEventListener('change', save);
 $('alertTiming').addEventListener('change', save);
+// Glow strength: preview while dragging, save when let go.
+function previewGlow() {
+  const el = document.createElement('div');
+  el.className = 'factflag-glow factflag-glow-false';
+  const s = Number($('glowStrength').value);
+  self.factflagApplyGlowStrength(el, s);
+  $('glowPreview').replaceChildren(el);
+  $('glowStrengthValue').textContent = `${s}%`;
+}
+$('glowStrength').addEventListener('input', previewGlow);
+$('glowStrength').addEventListener('change', () => { previewGlow(); save(); });
 for (const k of GLOW_FIELDS) $(k).addEventListener('change', save);
 $('provider').addEventListener('change', () => { updateProviderNote(); save(); });
 
