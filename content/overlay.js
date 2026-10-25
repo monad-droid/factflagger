@@ -135,7 +135,7 @@ self.FactFlagOverlay = (() => {
   let cardEl = null;
 
   // How long the card stays up (hovering pauses the countdown).
-  const CARD_MS = 7000;
+  const CARD_MS = 10000;
   function readingMs() {
     return CARD_MS;
   }
