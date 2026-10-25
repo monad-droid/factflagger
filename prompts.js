@@ -172,11 +172,10 @@ The speaker's exact words: "{{QUOTE}}"
 Search the web and return the relevant passages.`,
 
   // How hard the verdict model "thinks": 'low', 'medium' or 'high'.
-  // Thinking is billed as output, the priciest part of a request, so this is
-  // 'low' to save ChatGPT plan usage. A FALSE verdict still has to pass the
-  // quote check and the second check (contradictionReasoningEffort, below),
-  // which stays 'medium'. Set back to 'medium' if verdicts get sloppy.
-  verdictReasoningEffort: 'low',
+  // A wrong FALSE is the worst mistake this tool can make, so this is higher
+  // than for claim detection. (Measured on the ChatGPT plan, verdicts at
+  // 'medium' wrote only ~100 output tokens each, so 'low' saves little.)
+  verdictReasoningEffort: 'medium',
 
   verdictSystem: `You are a careful, neutral fact-checker. Decide whether a claim made in a YouTube video is supported by the web search results provided.
 

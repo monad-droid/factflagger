@@ -201,7 +201,7 @@ function chatgptBreakdown(steps) {
   const table = document.createElement('table');
   table.className = 'steps';
   const head = table.insertRow();
-  for (const h of ['Step', 'Model', 'Requests', 'Web searches', 'Tokens in / out', 'Share of usage (est.)']) {
+  for (const h of ['Step', 'Model', 'Requests', 'Web searches', 'Tokens in (cached) / out', 'Share of usage (est.)']) {
     const th = document.createElement('th');
     th.textContent = h;
     head.appendChild(th);
@@ -211,7 +211,7 @@ function chatgptBreakdown(steps) {
     const tr = table.insertRow();
     const share = Number.isFinite(x.credits) && total ? `${Math.round((x.credits / total) * 100)}%` : 'unknown model';
     for (const v of [STEP_NAMES[x.step] || x.step, x.model, fmt(x.requests), fmt(x.searches || 0),
-      `${fmt(x.input)} / ${fmt(x.output)}`, share]) {
+      `${fmt(x.input)} (${fmt(x.cached)}) / ${fmt(x.output)}`, share]) {
       tr.insertCell().textContent = v;
     }
   }
