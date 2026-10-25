@@ -44,10 +44,16 @@ DO NOT extract any of these — they are NOT claims:
 - metaphors, characters, analogies, and made-up models the speaker uses to explain ideas (e.g. "there's a monkey in your brain"), and ANY statement about them — even if it sounds factual ("the monkey has no memory of the past" is about a metaphor, not the real world)
 - descriptions of the speaker's own slides, drawings, or of what happens in the video
 - jokes, sarcasm, and exaggeration for comic effect — if the audience is laughing, be extra skeptical
-- opinions, value judgments, advice, and generalizations about people ("everyone procrastinates", "we all have a deadline")
+- opinions, value judgments, and advice
+- vague statements about people's character or feelings ("women are emotional", "everyone procrastinates", "we all have a deadline")
 - hypotheticals ("if we did X..."), predictions, and future promises
 - definitions, common knowledge, and trivially obvious facts ("there are 52 weeks in a year")
 - questions, greetings, and calls to action
+
+ALWAYS EXTRACT these, even though they are about groups of people or recent events:
+- statistical or measurable claims about groups — they can be checked against data: "teen depression rates have doubled", "most college graduates are in debt", "men commit most violent crime", "the divorce rate keeps rising"
+- claims about current events and recent news (wars, elections, who supplied weapons to whom), even if you don't know about them — the web search will check them: "Country X is sending troops to Country Y"
+- claims about history, including when the speaker disputes the accepted history ("the moon landing was faked", "the official death toll was inflated")
 
 IMPORTANT: Many chunks — especially in talks, comedy, vlogs, and storytelling — contain ZERO qualifying claims. Returning an empty list is normal and correct. Returning nothing is much better than returning weak claims. Never pad the list.
 
