@@ -173,16 +173,19 @@
     const restoreScroll = () => {
       if (window.scrollX !== scrollX || window.scrollY !== scrollY) window.scrollTo(scrollX, scrollY);
     };
-    // While we work (and for 2 s after), undo any page scroll the viewer didn't
+    // While we work (and for 5 s after), undo any page scroll the viewer didn't
     // make themselves — YouTube can move the page well after a click.
+    // Only real scrolling input counts: clicks and Space (play/pause on
+    // YouTube) used to switch the guard off, letting the page jump.
     let userScrolled = false;
     const onUserInput = (e) => {
-      if (e.type !== 'keydown' || ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(e.key)) {
+      if (e.type !== 'keydown' || ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) {
+        if (e.type === 'keydown' && e.target?.closest?.('#movie_player')) return;
         userScrolled = true;
       }
     };
     const onScroll = () => { if (!userScrolled) restoreScroll(); };
-    const inputEvents = ['wheel', 'touchmove', 'keydown', 'mousedown'];
+    const inputEvents = ['wheel', 'touchmove', 'keydown'];
     for (const ev of inputEvents) window.addEventListener(ev, onUserInput, { capture: true, passive: true });
     window.addEventListener('scroll', onScroll, { passive: true });
     // Scroll events can be delayed (e.g. in background tabs), so also check often.
@@ -201,7 +204,7 @@
         document.querySelector('ytd-text-inline-expander #collapse, #description-inline-expander #collapse')?.click();
       }
       if (!userScrolled) restoreScroll();
-      setTimeout(stopGuard, 2000);
+      setTimeout(stopGuard, 5000);
     }
   }
 
