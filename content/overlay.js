@@ -135,7 +135,8 @@ self.FactFlagOverlay = (() => {
       ? 'Showing each claim right after it is said. Click to show all claims found so far.'
       : 'Showing all claims found so far. Click to show them live, as they are said.';
     live.addEventListener('click', () => chrome.storage.local.set({ liveList: !liveList }));
-    head.append(live, ...(glowMode ? [] : [auto]), glow);
+    // Auto-open and glow mode are set on the settings page.
+    head.appendChild(live);
     const close = document.createElement('button');
     close.className = 'factflag-card-close';
     close.setAttribute('aria-label', 'Close');
