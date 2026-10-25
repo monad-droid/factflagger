@@ -160,16 +160,42 @@
     });
   }
 
+  // Opening the panel clicks buttons further down the page, which makes the
+  // browser scroll to them. Put the page back where the viewer had it.
   async function scrapeTranscriptPanel(token) {
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    const restoreScroll = () => window.scrollTo(scrollX, scrollY);
+    let expandedDescription = false;
+    try {
+      return await readTranscriptPanel(token, restoreScroll, () => { expandedDescription = true; });
+    } finally {
+      if (expandedDescription) {
+        document.querySelector('ytd-text-inline-expander #collapse, #description-inline-expander #collapse')?.click();
+      }
+      restoreScroll();
+      // YouTube sometimes scrolls again a moment later as the layout settles.
+      setTimeout(restoreScroll, 300);
+    }
+  }
+
+  async function readTranscriptPanel(token, restoreScroll, onExpanded) {
     let openedByUs = false;
     let rows = findTranscriptRows();
     if (rows.length < 3) {
       // The transcript button lives in the expanded description; the Transcript
       // tab lives in the "In this video" panel. Try each candidate in turn.
-      document.querySelector('ytd-text-inline-expander #expand, #description-inline-expander #expand')?.click();
+      const expand = document.querySelector('ytd-text-inline-expander #expand, #description-inline-expander #expand');
+      if (expand && expand.getClientRects().length) {
+        expand.click();
+        onExpanded();
+      }
+      restoreScroll();
       await sleep(500);
       for (const btn of transcriptButtons()) {
+        btn.focus?.({ preventScroll: true });
         btn.click();
+        restoreScroll();
         openedByUs = true;
         rows = await waitForRows(token, 3000);
         if (token !== runToken) return { ok: false, error: 'cancelled' };
