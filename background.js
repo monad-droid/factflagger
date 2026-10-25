@@ -597,6 +597,8 @@ function nextWork(job) {
   let best = null;
   let bestTime = Infinity;
   job.chunks.forEach((c, index) => {
+    // One section at a time: the speaker's-metaphor list builds up in order.
+    if (job.chunkInFlight !== null && job.chunkInFlight !== undefined) return;
     if (job.state.chunksDone.includes(index) || c.end < from || c.start > to) return;
     const time = Math.max(c.start, from);
     if (time < bestTime) { bestTime = time; best = { kind: 'chunk', index }; }
@@ -661,6 +663,12 @@ async function processClaim(job, claim, settings, onWait) {
   }
 }
 
+// How many things to check at the same time. On the ChatGPT plan, each
+// web-search verdict takes several seconds, so one at a time can fall behind
+// fast-talking videos. Groq's free plan limits requests per minute, so it
+// stays at one.
+const PARALLEL_CHECKS = { chatgpt: 3, groq: 1 };
+
 async function runJob(job) {
   const { state } = job;
   const chunkFailures = new Map();
@@ -668,6 +676,13 @@ async function runJob(job) {
     state.note = `rate limit — waiting ${secs}s`;
     saveState(state);
   };
+  // Several workers share the queue; any of them can wake the others.
+  job.waiters = [];
+  job.wake = () => { const w = job.waiters; job.waiters = []; w.forEach((resolve) => resolve()); };
+  job.active = 0;
+  job.chunkInFlight = null;
+  const setBusy = () => { job.busy = job.active > 0; updateKeepAlive(); };
+
   try {
     const settings = await getSettings();
     if (settings.provider === 'chatgpt') {
@@ -684,57 +699,84 @@ async function runJob(job) {
       refreshTavilyUsage(settings.tavilyApiKey, false).catch(() => {});
     }
 
-    while (!job.cancelled) {
-      const work = nextWork(job);
-      if (!work) {
-        const settled = everythingDone(job) ? 'done' : 'idle';
-        if (state.status !== settled || state.note) {
-          state.status = settled;
-          state.note = '';
-          await saveState(state);
-        }
-        if (state.status === 'done') {
-          const falseCount = state.claims.filter((c) => c.verdict === 'FALSE').length;
-          console.info(LOG, `Finished ${job.videoId}: ${state.claims.length} claims, ${falseCount} false.`);
-          break;
-        }
-        // Nothing to do near the viewer — wait for them to keep watching or seek.
-        job.busy = false;
-        updateKeepAlive();
-        await new Promise((resolve) => { job.wake = resolve; });
-        job.wake = null;
-        continue;
-      }
-
-      job.busy = true;
-      updateKeepAlive();
-      if (state.status !== 'working') {
-        state.status = 'working';
-        await saveState(state);
-      }
-      if (work.kind === 'chunk') {
-        try {
-          await processChunk(job, work.index, settings, onWait);
-        } catch (e) {
-          if (isFatal(e)) throw e;
-          const fails = (chunkFailures.get(work.index) || 0) + 1;
-          chunkFailures.set(work.index, fails);
-          console.warn(LOG, `Scanning section ${work.index + 1} failed (${e.message})${fails >= 2 ? ' — skipping it' : ' — will retry'}`);
-          if (fails >= 2) {
-            state.chunksDone.push(work.index);
-            state.sectionsFailed = (state.sectionsFailed || 0) + 1;
-            state.lastSectionError = e.message;
+    const worker = async () => {
+      while (!job.cancelled && !job.finished) {
+        const work = nextWork(job);
+        if (!work) {
+          if (job.active === 0) {
+            const settled = everythingDone(job) ? 'done' : 'idle';
+            if (state.status !== settled || state.note) {
+              state.status = settled;
+              state.note = '';
+              await saveState(state);
+            }
+            if (settled === 'done') {
+              if (!job.finished) {
+                job.finished = true;
+                const falseCount = state.claims.filter((c) => c.verdict === 'FALSE').length;
+                console.info(LOG, `Finished ${job.videoId}: ${state.claims.length} claims, ${falseCount} false.`);
+              }
+              job.wake();
+              return;
+            }
           }
-          else await new Promise((r) => setTimeout(r, 5000));
+          // Nothing to do near the viewer — wait for them to keep watching or seek,
+          // or for another worker to finish something that frees up work.
+          setBusy();
+          await new Promise((resolve) => job.waiters.push(resolve));
+          continue;
         }
-      } else {
-        await processClaim(job, work.claim, settings, onWait);
+
+        // Claim the work before any await so other workers don't take it too.
+        if (work.kind === 'chunk') job.chunkInFlight = work.index;
+        else work.claim.status = 'checking';
+        job.active++;
+        setBusy();
+        try {
+          if (state.status !== 'working') {
+            state.status = 'working';
+            await saveState(state);
+          }
+          if (work.kind === 'chunk') {
+            try {
+              await processChunk(job, work.index, settings, onWait);
+            } catch (e) {
+              if (isFatal(e)) throw e;
+              const fails = (chunkFailures.get(work.index) || 0) + 1;
+              chunkFailures.set(work.index, fails);
+              console.warn(LOG, `Scanning section ${work.index + 1} failed (${e.message})${fails >= 2 ? ' — skipping it' : ' — will retry'}`);
+              if (fails >= 2) {
+                state.chunksDone.push(work.index);
+                state.sectionsFailed = (state.sectionsFailed || 0) + 1;
+                state.lastSectionError = e.message;
+              } else {
+                await new Promise((r) => setTimeout(r, 5000));
+              }
+            } finally {
+              job.chunkInFlight = null;
+            }
+          } else {
+            await processClaim(job, work.claim, settings, onWait);
+          }
+          if (!job.cancelled) {
+            state.note = '';
+            await saveState(state);
+          }
+        } finally {
+          job.active--;
+          setBusy();
+          job.wake(); // new claims or a finished check may give others work
+        }
       }
-      if (job.cancelled) break;
-      state.note = '';
-      await saveState(state);
-    }
+    };
+
+    const count = PARALLEL_CHECKS[settings.provider] || 1;
+    const results = await Promise.allSettled(Array.from({ length: count }, worker));
+    const failed = results.find((r) => r.status === 'rejected');
+    if (failed) throw failed.reason;
   } catch (e) {
+    job.cancelled = true;
+    job.wake?.();
     console.error(LOG, `Checking stopped for ${job.videoId}:`, e.message);
     state.status = 'error';
     state.error = e.message;

@@ -53,7 +53,14 @@ self.FactFlagOverlay = (() => {
 
   function claimLabel(c) {
     if (c.status === 'skipped') return { text: 'LIKELY TRUE · not searched', cls: 'skipped' };
-    if (c.status === 'pending' || c.status === 'checking') return { text: 'CHECKING…', cls: 'pending' };
+    if (c.status === 'checking') return { text: 'CHECKING…', cls: 'pending' };
+    if (c.status === 'pending') {
+      // Claims the viewer already went past are skipped, to save usage.
+      const now = video()?.currentTime || 0;
+      return now > (c.tEnd || c.t) + 20
+        ? { text: 'PASSED · not checked', cls: 'skipped' }
+        : { text: 'QUEUED', cls: 'pending' };
+    }
     if (c.status === 'error') return { text: 'ERROR', cls: 'error' };
     const v = VERDICT_LABELS[c.verdict] || 'UNVERIFIABLE';
     return { text: v, cls: v.toLowerCase() };
