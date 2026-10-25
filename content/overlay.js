@@ -134,11 +134,10 @@ self.FactFlagOverlay = (() => {
   const cardQueue = [];
   let cardEl = null;
 
-  // Roughly reading time: ~3 words/second plus a few seconds to notice it.
-  function readingMs(claim) {
-    const text = [claim.claim, claim.quote, claim.explanation, claim.evidenceQuote].join(' ');
-    const words = text.split(/\s+/).filter(Boolean).length;
-    return Math.min(25000, Math.max(10000, (words / 3 + 4) * 1000));
+  // How long the card stays up (hovering pauses the countdown).
+  const CARD_MS = 5000;
+  function readingMs() {
+    return CARD_MS;
   }
 
   function line(className, text) {
