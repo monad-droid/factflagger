@@ -139,6 +139,36 @@ CLAIMS:
   // Search results fed to the verdict model. More = better evidence but more tokens.
   searchResultsPerClaim: 5,
 
+  // ChatGPT plan only — the web search inside each verdict. The pages a search
+  // reads count as input, so these two settings decide most of the plan usage.
+  // Most web searches a verdict may run (OpenAI lets the model run several).
+  chatgptMaxSearchesPerVerdict: 1,
+  // How much text from the found pages the model reads: 'low', 'medium' or 'high'.
+  chatgptSearchContextSize: 'low',
+
+  // true: the claim-finding model (cheap, e.g. Luna) runs the web search and
+  // copies out passages; the verdict model then judges from those passages
+  // without searching. false: the verdict model searches and judges in one go
+  // (more accurate search, but uses far more plan allowance).
+  chatgptSearchWithFastModel: true,
+  evidenceReasoningEffort: 'low',
+
+  // {{MAX_RESULTS}} is filled in automatically.
+  evidenceSystem: `You gather evidence for a fact-checker. You do NOT decide whether the claim is true.
+
+Use your web search tool to find reliable pages about the claim (official statistics, government or international bodies, academic sources, reputable news). Prefer pages with specific facts or figures on exactly what the claim says, and include pages that contradict it as well as ones that support it.
+
+Return up to {{MAX_RESULTS}} results. For each: the page's URL exactly as your search returned it, its title, its publication date if shown (else ""), and "excerpt": the passage(s) from that page relevant to the claim, copied WORD FOR WORD (no paraphrasing, no summaries, no added words; separate non-adjacent passages with " ... "), at most about 120 words. Only include pages your search actually returned. If nothing relevant is found, return an empty list.`,
+
+  // {{TITLE}}, {{PUBLISHED}}, {{CLAIM}}, {{QUOTE}} are filled in automatically.
+  evidenceUser: `Video title: {{TITLE}}
+Video published: {{PUBLISHED}}
+
+CLAIM: {{CLAIM}}
+The speaker's exact words: "{{QUOTE}}"
+
+Search the web and return the relevant passages.`,
+
   // How hard the verdict model "thinks": 'low', 'medium' or 'high'.
   // A wrong FALSE is the worst mistake this tool can make, so this is higher
   // than for claim detection.

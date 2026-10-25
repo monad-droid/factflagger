@@ -178,7 +178,7 @@ const CREDIT_RATES = {
   gpt61sol: [50, 2.5, 250], gpt6sol: [50, 5, 250], gpt6astra: [250, 25, 1250], gpt6luna: [2.5, 0.25, 12.5],
   gpt56sol: [100, 10, 500], gpt56terra: [50, 5, 300], gpt56luna: [5, 0.5, 30]
 };
-const STEP_NAMES = { claims: 'Finding claims', triage: 'Screening', verdict: 'Verdicts (web search)', contradiction: 'Second check' };
+const STEP_NAMES = { claims: 'Finding claims', triage: 'Screening', evidence: 'Web search', verdict: 'Verdicts', contradiction: 'Second check' };
 
 function chatgptBreakdown(steps) {
   const credits = (x) => {

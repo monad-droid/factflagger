@@ -277,8 +277,12 @@ const VERDICT_SCHEMA = {
 };
 
 async function verifyClaim(claim, meta, settings, onWait) {
-  if (settings.provider === 'chatgpt') return verifyClaimWithChatGPT(claim, meta, settings, onWait);
   const P = self.FACTFLAG_PROMPTS;
+  if (settings.provider === 'chatgpt') {
+    if (P.chatgptSearchWithFastModel === false) return verifyClaimWithChatGPT(claim, meta, settings, onWait);
+    const results = await chatgptGatherEvidence(claim, meta, settings, onWait);
+    return judgeWithResults(claim, meta, settings, results, onWait);
+  }
   const results = await tavilySearch({
     apiKey: settings.tavilyApiKey,
     query: claim.claim,
@@ -286,6 +290,13 @@ async function verifyClaim(claim, meta, settings, onWait) {
     onWait
   });
   recordTavilySearch();
+  return judgeWithResults(claim, meta, settings, results, onWait);
+}
+
+// Verdict from search results given as text ({ title, url, published, content }).
+// FALSE needs a quote that really appears in one of the results.
+async function judgeWithResults(claim, meta, settings, results, onWait) {
+  const P = self.FACTFLAG_PROMPTS;
   if (!results.length) {
     return { verdict: 'UNVERIFIABLE', explanation: 'The web search returned no results.', sourceUrl: '', sourceTitle: '' };
   }
@@ -308,15 +319,17 @@ async function verifyClaim(claim, meta, settings, onWait) {
     onWait
   });
   if (usage) {
-    console.info(LOG, `verdict ${fmtTime(claim.t)}: ${usage.total_tokens} tokens, ${usage.prompt_tokens_details?.cached_tokens || 0} cached ` +
-      `(prompt ${usage.prompt_tokens}, completion ${usage.completion_tokens})`);
+    // Groq names these prompt/completion tokens; OpenAI's Responses API input/output.
+    const cached = usage.prompt_tokens_details?.cached_tokens ?? usage.input_tokens_details?.cached_tokens ?? 0;
+    console.info(LOG, `verdict ${fmtTime(claim.t)}: ${usage.total_tokens} tokens, ${cached} cached ` +
+      `(in ${usage.prompt_tokens ?? usage.input_tokens}, out ${usage.completion_tokens ?? usage.output_tokens})`);
   }
 
   let verdict = ['TRUE', 'FALSE', 'MISLEADING', 'UNVERIFIABLE'].includes(json.verdict) ? json.verdict : 'UNVERIFIABLE';
   let explanation = String(json.explanation || '').trim();
   const evidenceQuote = String(json.evidence_quote || '').trim();
   // The source must be one of the search results — never a URL the model made up.
-  const source = results.find((r) => r.url === String(json.source_url || '').trim());
+  const source = results.find((r) => r.url === String(json.source_url || '').trim() || sameUrl(r.url, json.source_url));
 
   // A FALSE/MISLEADING verdict must be backed by a real, specific contradiction.
   if (verdict === 'FALSE' || verdict === 'MISLEADING') {
@@ -342,12 +355,67 @@ async function verifyClaim(claim, meta, settings, onWait) {
     verdict,
     explanation,
     evidenceQuote: verdict === 'UNVERIFIABLE' ? '' : evidenceQuote,
-    sourceUrl: source?.url || '',
+    sourceUrl: source?.url ? cleanUrl(source.url) : '',
     sourceTitle: source?.title || ''
   };
 }
 
-// ChatGPT-plan verdict: the model searches the web itself (search is forced).
+const EVIDENCE_SCHEMA = {
+  type: 'object',
+  properties: {
+    results: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          url: { type: 'string' },
+          title: { type: 'string' },
+          published: { type: 'string' },
+          excerpt: { type: 'string' }
+        },
+        required: ['url', 'title', 'published', 'excerpt'],
+        additionalProperties: false
+      }
+    }
+  },
+  required: ['results'],
+  additionalProperties: false
+};
+
+// ChatGPT plan, step 1 of a verdict: the cheaper claim-finding model runs the
+// web search and copies out the relevant passages word for word. Reading whole
+// pages is what uses most plan allowance, so the verdict model never does.
+// Only pages the search really returned are kept.
+async function chatgptGatherEvidence(claim, meta, settings, onWait) {
+  const P = self.FACTFLAG_PROMPTS;
+  const r = await aiJson(settings, 'fast', {
+    system: fill(P.evidenceSystem, { MAX_RESULTS: P.searchResultsPerClaim }),
+    user: fill(P.evidenceUser, {
+      TITLE: meta.title || 'unknown',
+      PUBLISHED: meta.published || 'unknown',
+      CLAIM: claim.claim,
+      QUOTE: claim.quote
+    }),
+    schemaName: 'evidence',
+    schema: EVIDENCE_SCHEMA,
+    reasoningEffort: P.evidenceReasoningEffort,
+    webSearch: true,
+    onWait
+  });
+  const found = (r.json.results || []).slice(0, P.searchResultsPerClaim);
+  const results = [];
+  for (const x of found) {
+    const page = r.citations.find((c) => sameUrl(c.url, x.url));
+    if (!page) continue; // not a page this search returned
+    const content = String(x.excerpt || '').trim();
+    if (content) results.push({ url: page.url, title: String(x.title || page.title || ''), published: x.published || '', content });
+  }
+  console.info(LOG, `evidence ${fmtTime(claim.t)}: ${r.model} took ${(r.ms / 1000).toFixed(1)}s, ` +
+    `${r.webSearches} search(es), ${results.length} of ${found.length} passage(s) from pages the search returned`);
+  return results;
+}
+
+// ChatGPT-plan verdict (older one-step way, off by default): the model searches the web itself (search is forced).
 // OpenAI returns links but not page text, so instead of finding the quote in
 // the page, we require the source to be one of the pages the search returned.
 async function verifyClaimWithChatGPT(claim, meta, settings, onWait) {
