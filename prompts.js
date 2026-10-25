@@ -142,9 +142,11 @@ CLAIMS:
   // ChatGPT plan only — the web search inside each verdict. The pages a search
   // reads count as input, so these two settings decide most of the plan usage.
   // Most web searches a verdict may run (OpenAI lets the model run several).
-  chatgptMaxSearchesPerVerdict: 1,
-  // How much text from the found pages the model reads: 'low', 'medium' or 'high'.
-  chatgptSearchContextSize: 'low',
+  // 0 = no cap (OpenAI's default). Try 1 only if plan usage is still too high.
+  chatgptMaxSearchesPerVerdict: 0,
+  // How much text from the found pages the model reads: 'low', 'medium'
+  // (OpenAI's default) or 'high'. 'low' saves usage but may miss evidence.
+  chatgptSearchContextSize: 'medium',
 
   // true: the claim-finding model (cheap, e.g. Luna) runs the web search and
   // copies out passages; the verdict model then judges from those passages
