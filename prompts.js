@@ -46,6 +46,7 @@ DO NOT extract any of these — they are NOT claims:
 - jokes, sarcasm, and exaggeration for comic effect — if the audience is laughing, be extra skeptical
 - opinions, value judgments, and advice
 - vague statements about people's character or feelings ("women are emotional", "everyone procrastinates", "we all have a deadline")
+- characterizations of what someone talks about, cares about, focuses on, or prioritizes ("he doesn't talk about inflation anymore", "they only care about the rich") — these are political framing, not checkable facts
 - hypotheticals ("if we did X..."), predictions, and future promises
 - definitions, common knowledge, and trivially obvious facts ("there are 52 weeks in a year")
 - claims whose key term is vague or undefined, so there's nothing to measure ("women have more sexual access", "men have no power anymore", "society is more toxic", "X is better") — unless the speaker ties it to a specific number or study
@@ -157,6 +158,10 @@ Rules:
 - When in doubt, choose UNVERIFIABLE. Never guess. Calling a true claim FALSE is the worst possible mistake.
 - If the claim's key term is vague or undefined (e.g. "sexual access", "power", "toxic"), no source can directly contradict it: choose UNVERIFIABLE.
 - Read the evidence literally. A source contradicts the claim only if what it says cannot be true at the same time as the claim. A source that is compatible with the claim, or even supports it, is NOT a contradiction.
+- Judge what the speaker evidently means, allowing ordinary conversational exaggeration and rounding: "decades" for 17 years, "everyone" for most people, "basically all" for nearly all. FALSE is only for claims whose core fact is wrong — not for loose wording around a correct fact (at most MISLEADING).
+- Statements about what someone talks about, cares about, or prioritizes ("he doesn't talk about inflation anymore") are characterizations: one counter-example does not make them FALSE. Use UNVERIFIABLE.
+- A law, guideline, or ban saying something must not happen does not show that it isn't happening or being attempted.
+- A source saying something hasn't been achieved yet does not contradict a claim that people are working toward it.
 - Contested political or social claims (causes of unrest, immigration, crime, elections) need especially clear, specific contradicting facts for FALSE. One outlet's characterization or opinion is not enough.
 - Judge the speaker's actual words, including their qualifiers ("a lot of the time", "often", "about"), not just the one-sentence summary. If the summary is stronger, broader, or more absolute than what was said, judge what was actually said.
 - Judge the claim against the most recent data that was available when the video was published — usually the latest annual or monthly figure, even if it is a year or so older than the video. Do NOT require data from the exact month of publication, and do not call a claim UNVERIFIABLE just because the newest figure is from last year. A claim that was true then is not FALSE just because things changed later.
@@ -182,6 +187,11 @@ Answer one question: read literally, does the QUOTE directly contradict the CLAI
 - "yes": the quote states something that directly rules out the claim (different number, date, fact, or the opposite conclusion about the same thing).
 - "no": the quote is compatible with the claim, supports it, or is about something different.
 - "unclear": it depends on interpretation, on how vague words are defined, or on information not in the quote.
+
+Also answer "unclear" (not "yes") when:
+- the quote only contradicts a literal or exaggerated reading of casual speech ("decades" for 17 years, "doesn't talk about X anymore" disproved by one mention), while the speaker's evident point still stands;
+- the quote is a rule, guideline, or ban saying something shouldn't happen — that doesn't show it isn't happening or being attempted;
+- the quote says something hasn't been achieved, but the claim is that people are working toward it.
 
 Use only the claim and the quote. Do not use outside knowledge. If you are not sure, answer "unclear".
 "reason": one short sentence.`,

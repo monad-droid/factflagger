@@ -95,7 +95,8 @@ self.FactFlagOverlay = (() => {
     if (!allClaims.length) {
       body.appendChild(line('factflag-list-empty', 'No checkable claims yet. FactFlag checks about a minute ahead of where you are.'));
     }
-    for (const c of [...allClaims].sort((a, b) => a.t - b.t)) {
+    // Latest moment in the video first.
+    for (const c of [...allClaims].sort((a, b) => b.t - a.t)) {
       const row = document.createElement('div');
       row.className = 'factflag-list-row';
       const top = document.createElement('div');
