@@ -10,9 +10,13 @@ self.FACTFLAG_DEFAULTS = {
   // Claims list fills in live (each claim appears right after it's said);
   // off = show every claim found so far, including ones ahead.
   liveList: true,
-  // Open the claims list by itself whenever a new claim is said (it stays
-  // open). Off = it opens only for FALSE claims, and closes after 10 s.
+  // Open the claims list for 10 s whenever a claim has been said (and has its
+  // result). Off = only for FALSE claims.
   autoOpenList: true,
+  // Glow mode: instead of opening the list, a soft glow around the video's
+  // edge fades in and out in the verdict's colour. No words until you open
+  // the list yourself.
+  glowMode: false,
   groqApiKey: '',
   tavilyApiKey: '',
   // Fast model: finds checkable claims in transcript chunks.

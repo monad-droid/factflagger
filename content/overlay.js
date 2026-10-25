@@ -59,25 +59,29 @@ self.FactFlagOverlay = (() => {
   let shownKey = '';
   let liveList = self.FACTFLAG_DEFAULTS.liveList;
   let autoOpenList = self.FACTFLAG_DEFAULTS.autoOpenList;
-  chrome.storage.local.get(['liveList', 'autoOpenList']).then((s) => {
+  let glowMode = self.FACTFLAG_DEFAULTS.glowMode;
+  chrome.storage.local.get(['liveList', 'autoOpenList', 'glowMode']).then((s) => {
     if (typeof s.liveList === 'boolean') liveList = s.liveList;
     if (typeof s.autoOpenList === 'boolean') autoOpenList = s.autoOpenList;
+    if (typeof s.glowMode === 'boolean') glowMode = s.glowMode;
     if (listOpen) renderList();
   });
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local' || (!changes.liveList && !changes.autoOpenList)) return;
+    if (area !== 'local' || (!changes.liveList && !changes.autoOpenList && !changes.glowMode)) return;
     if (changes.liveList) liveList = !!changes.liveList.newValue;
+    if (changes.glowMode) glowMode = !!changes.glowMode.newValue;
     if (changes.autoOpenList) {
       autoOpenList = !!changes.autoOpenList.newValue;
-      if (autoOpenList) stopAutoClose();
     }
     shownKey = '';
     if (listOpen) renderList();
   });
   // Claims playback has passed the end of (whatever the Live setting).
   const said = (c) => (video()?.currentTime || 0) >= (c.tEnd || c.t) + 0.5;
-  let saidIds = new Set();
-  const heard = (c) => !liveList || revealed.has(c.id) || (video()?.currentTime || 0) >= (c.tEnd || c.t) + 0.5;
+  // Only claims with a result are listed — never ones still queued or being checked.
+  const ready = (c) => c.status === 'done' || c.status === 'skipped' || c.status === 'error';
+  const heard = (c) => ready(c) && (!liveList || revealed.has(c.id) || said(c));
+  let readyIds = new Set(); // claims said and ready at the last check, for auto-open
   let listEl = null;
 
   const VERDICT_LABELS = {
@@ -127,10 +131,9 @@ self.FactFlagOverlay = (() => {
     const head = document.createElement('div');
     head.className = 'factflag-list-head';
     const visible = allClaims.filter(heard);
-    const ahead = allClaims.length - visible.length;
     head.append(line('factflag-list-title', liveList
-      ? `Claims heard so far (${visible.length})${ahead ? ` · ${ahead} lined up ahead` : ''}`
-      : `Claims found so far (${visible.length})`));
+      ? `Claims heard so far (${visible.length})`
+      : `Claims checked so far (${visible.length})`));
     const live = document.createElement('button');
     live.className = `factflag-live${liveList ? ' on' : ''}`;
     live.textContent = liveList ? '● Live' : 'Live: off';
@@ -142,10 +145,18 @@ self.FactFlagOverlay = (() => {
     auto.className = `factflag-live${autoOpenList ? ' on' : ''}`;
     auto.textContent = autoOpenList ? 'Auto-open' : 'Auto-open: off';
     auto.title = autoOpenList
-      ? 'This list opens by itself whenever a new claim is said. Click to open it only for FALSE claims.'
-      : 'This list opens by itself only for FALSE claims. Click to open it for every new claim.';
+      ? 'This list opens for 10 seconds whenever a claim is said. Click to open it only for FALSE claims.'
+      : 'This list opens for 10 seconds only for FALSE claims. Click to open it for every claim.';
     auto.addEventListener('click', () => chrome.storage.local.set({ autoOpenList: !autoOpenList }));
-    head.append(live, auto);
+    const glow = document.createElement('button');
+    glow.className = `factflag-live${glowMode ? ' on' : ''}`;
+    glow.textContent = glowMode ? 'Glow' : 'Glow: off';
+    glow.title = glowMode
+      ? 'Glow mode: the video edge glows in the verdict colour instead of this list opening. Click to turn off.'
+      : 'Click for glow mode: the video edge glows in the verdict colour instead of this list opening.';
+    glow.addEventListener('click', () => chrome.storage.local.set({ glowMode: !glowMode }));
+    // In glow mode the list never opens by itself, so Auto-open doesn't apply.
+    head.append(live, ...(glowMode ? [] : [auto]), glow);
     const close = document.createElement('button');
     close.className = 'factflag-card-close';
     close.setAttribute('aria-label', 'Close');
@@ -235,25 +246,36 @@ self.FactFlagOverlay = (() => {
   function listKey() {
     return allClaims.filter(heard).map((c) => c.id).join(',') || 'none';
   }
+  // Auto-open: when a claim has just been said and has its result (or the
+  // result arrives a little after), open the list for 10 seconds. Claims
+  // skipped past by seeking don't count.
+  const AUTO_OPEN_LATE_SECONDS = 15;
+  function checkAutoOpen() {
+    const t = video()?.currentTime || 0;
+    const now = new Set(allClaims.filter((c) => ready(c) && said(c)).map((c) => c.id));
+    const fresh = allClaims.filter((c) => now.has(c.id) && !readyIds.has(c.id) &&
+      t - ((c.tEnd || c.t) + 0.5) < AUTO_OPEN_LATE_SECONDS);
+    readyIds = now;
+    if (!fresh.length) return false;
+    if (glowMode) {
+      glowFor(fresh);
+      return false;
+    }
+    if (!autoOpenList) return false;
+    if (listOpen && !autoOpened) return false; // the viewer opened it; leave it be
+    if (!listOpen) shownKey = '';
+    listOpen = true;
+    startAutoClose();
+    renderStatus();
+    renderList();
+    return true;
+  }
+
   // Add rows as playback reaches the end of each claim (and drop them again
   // after seeking back). timeupdate doesn't bubble, so listen in capture.
   document.addEventListener('timeupdate', (e) => {
     if (e.target !== video()) return;
-    // Auto-open: a claim was just said (not one skipped past by seeking).
-    const nowSaid = new Set(allClaims.filter(said).map((c) => c.id));
-    const fresh = [...nowSaid].some((id) => !saidIds.has(id));
-    const t = video().currentTime;
-    const playedThrough = allClaims.some((c) => !saidIds.has(c.id) && nowSaid.has(c.id) &&
-      t - ((c.tEnd || c.t) + 0.5) < 3);
-    saidIds = nowSaid;
-    if (fresh && playedThrough && autoOpenList && !listOpen) {
-      stopAutoClose();
-      listOpen = true;
-      shownKey = '';
-      renderStatus();
-      renderList();
-      return;
-    }
+    if (checkAutoOpen()) return;
     if (listOpen && listKey() !== shownKey) renderList();
   }, true);
 
@@ -436,8 +458,8 @@ self.FactFlagOverlay = (() => {
     flashId = claim.id;
     if (!allClaims.some((c) => c.id === claim.id)) allClaims = [...allClaims, claim];
     if (auto) {
-      // Closes itself only if Auto-open is off and the viewer didn't open it.
-      if (!autoOpenList && (!listOpen || autoOpened)) startAutoClose();
+      // Closes itself after 10 s, unless the viewer opened it.
+      if (!listOpen || autoOpened) startAutoClose();
     } else {
       stopAutoClose();
     }
@@ -448,13 +470,42 @@ self.FactFlagOverlay = (() => {
   }
 
   function alertClaim(claim) {
-    showInList(claim, true);
+    if (glowMode) glowFor([claim]);
+    else showInList(claim, true);
+  }
+
+  // ---- Glow mode ----
+  // Most serious verdict first, so a FALSE claim said together with a TRUE
+  // one glows red.
+  const GLOW_ORDER = ['FALSE', 'MISLEADING', 'UNVERIFIABLE', 'TRUE'];
+  function glowKind(c) {
+    if (c.status === 'skipped') return 'true';
+    if (c.status !== 'done') return null;
+    return GLOW_ORDER.includes(c.verdict) ? c.verdict.toLowerCase() : 'unverifiable';
+  }
+  let glowEl = null;
+  const glowedAt = new Map(); // claim id -> when it last glowed
+  function glowFor(list) {
+    // The FALSE alert and the list update can both ask to glow the same claim.
+    const now = performance.now();
+    const todo = list.filter((c) => !(now - (glowedAt.get(c.id) || -1e9) < 5000));
+    todo.forEach((c) => glowedAt.set(c.id, now));
+    const kinds = todo.map(glowKind).filter(Boolean);
+    if (!kinds.length) return;
+    const kind = GLOW_ORDER.map((v) => v.toLowerCase()).find((k) => kinds.includes(k));
+    const p = player();
+    if (!p) return;
+    glowEl?.remove();
+    glowEl = document.createElement('div');
+    glowEl.className = `factflag-glow factflag-glow-${kind}`;
+    glowEl.addEventListener('animationend', () => { glowEl?.remove(); glowEl = null; });
+    p.appendChild(glowEl);
   }
 
   function clearAlerts() {
     stopAutoClose();
     revealed.clear();
-    saidIds = new Set();
+    readyIds = new Set();
     flashId = null;
   }
 
@@ -505,7 +556,7 @@ self.FactFlagOverlay = (() => {
     },
     setAllClaims(list) {
       allClaims = list || [];
-      if (listOpen) renderList();
+      if (!checkAutoOpen() && listOpen) renderList();
     },
     setClaims(list) {
       claims = list || [];

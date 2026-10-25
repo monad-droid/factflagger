@@ -14,12 +14,13 @@ async function load() {
   $('soundEnabled').checked = !!s.soundEnabled;
   $('liveList').checked = !!s.liveList;
   $('autoOpenList').checked = !!s.autoOpenList;
+  $('glowMode').checked = !!s.glowMode;
   $('provider').value = s.provider || 'chatgpt';
   updateProviderNote();
 }
 
 async function save() {
-  const values = { enabled: $('enabled').checked, soundEnabled: $('soundEnabled').checked, liveList: $('liveList').checked, autoOpenList: $('autoOpenList').checked, provider: $('provider').value };
+  const values = { enabled: $('enabled').checked, soundEnabled: $('soundEnabled').checked, liveList: $('liveList').checked, autoOpenList: $('autoOpenList').checked, glowMode: $('glowMode').checked, provider: $('provider').value };
   for (const f of FIELDS) values[f] = $(f).value.trim();
   if (!values.detectionModel) values.detectionModel = D.detectionModel;
   if (!values.verdictModel) values.verdictModel = D.verdictModel;
@@ -271,6 +272,7 @@ $('enabled').addEventListener('change', save);
 $('soundEnabled').addEventListener('change', save);
 $('liveList').addEventListener('change', save);
 $('autoOpenList').addEventListener('change', save);
+$('glowMode').addEventListener('change', save);
 $('provider').addEventListener('change', () => { updateProviderNote(); save(); });
 
 function updateProviderNote() {
