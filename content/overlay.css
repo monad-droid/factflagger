@@ -47,22 +47,7 @@
 #movie_player.factflag-hovering .ytp-tooltip { display: none !important; }
 .factflag-tip-quote { margin-top: 4px; font-size: 12px; font-style: italic; opacity: 0.75; }
 
-/* Alert card shown when playback reaches a FALSE claim. */
-.factflag-card {
-  position: absolute; top: 12px; right: 12px; z-index: 80;
-  width: min(380px, calc(100% - 24px)); box-sizing: border-box;
-  padding: 12px 14px 14px; border-radius: 10px;
-  background: rgba(20, 20, 20, 0.96); color: #fff;
-  border-left: 4px solid #e53935;
-  font: 14px/1.45 Roboto, Arial, sans-serif;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
-  animation: factflag-in 0.2s ease-out;
-  overflow: hidden;
-}
-@keyframes factflag-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
-.factflag-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.factflag-card-badge { background: #e53935; color: #fff; font-weight: 700; font-size: 12px; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 4px; }
-.factflag-card-time { font-size: 12px; opacity: 0.7; }
+/* Buttons shared by the claims list. */
 .factflag-card-close {
   margin-left: auto; background: none; border: none; color: #fff; font-size: 18px; line-height: 1;
   cursor: pointer; opacity: 0.7; padding: 2px 4px;
@@ -74,11 +59,6 @@
 }
 .factflag-card-copy:hover { background: rgba(255, 255, 255, 0.22); }
 .factflag-card-copy + .factflag-card-close { margin-left: 4px; }
-.factflag-card-claim { font-weight: 500; }
-.factflag-card-line { margin-top: 6px; font-size: 13px; opacity: 0.9; }
-.factflag-card-quote { margin-top: 6px; font-size: 12px; font-style: italic; opacity: 0.75; }
-.factflag-card a { color: #8ab4f8; text-decoration: underline; }
-.factflag-card-timer { position: absolute; left: 0; bottom: 0; height: 3px; background: #e53935; width: 100%; }
 
 /* List of every checked claim, opened from the status line. */
 .factflag-list {
@@ -125,3 +105,25 @@
   color: #ccc; border-radius: 10px; padding: 1px 8px; font-size: 11px; cursor: pointer; }
 .factflag-live.on { color: #ff5252; border-color: #ff5252; }
 .factflag-live + .factflag-card-close { margin-left: 0; }
+
+/* FALSE claims: red edge; the one just said flashes red. */
+.factflag-list-false { border-left: 3px solid #e53935; padding-left: 8px; margin-left: -11px; }
+.factflag-list-alert { animation: factflag-alert 3s ease-out; }
+@keyframes factflag-alert {
+  from { background: rgba(229, 57, 53, 0.45); }
+  to { background: transparent; }
+}
+.factflag-list-quote { margin-top: 3px; font-size: 12px; font-style: italic; opacity: 0.75; }
+/* Countdown while a list opened by an alert is about to close itself. */
+.factflag-list { overflow: hidden; }
+.factflag-list-timer { height: 3px; background: #e53935; width: 100%; flex: none; }
+.factflag-list-top .factflag-card-copy { margin-left: auto; padding: 3px 8px; font-size: 11px; }
+
+/* Usage-limit banner. */
+.factflag-banner {
+  position: absolute; top: 12px; right: 12px; z-index: 85; display: flex; flex-wrap: wrap; align-items: flex-start;
+  width: min(420px, calc(100% - 24px)); box-sizing: border-box; padding: 10px 12px; border-radius: 10px;
+  background: #b71c1c; color: #fff; font: 13px/1.4 Roboto, Arial, sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+}
+.factflag-banner-text { font-weight: 700; flex: 1; }
+.factflag-banner-detail { order: 3; width: 100%; margin-top: 4px; font-size: 12px; opacity: 0.9; }

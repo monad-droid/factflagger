@@ -496,10 +496,10 @@
     if (soundOn && self.factflagDing()) console.info(LOG, `ding — FALSE claim at ${fmtTime(c.t)}`);
   }
 
-  // ---- Pop-up alert when playback reaches a FALSE claim ----
+  // ---- Alert (claims list opens on it, plus the ding) when playback reaches a FALSE claim ----
   const LATE_ALERT_SECONDS = 15; // verdict arrived just after the claim was said
   const AFTER_SENTENCE_SECONDS = 0.5; // small pause after the speaker finishes
-  // The card appears right after the claim has been fully said.
+  // The alert comes right after the claim has been fully said.
   const alertAt = (c) => (Number.isFinite(c.tEnd) ? c.tEnd : c.t) + AFTER_SENTENCE_SECONDS;
   let falseClaims = [];
   const alerted = new Set();     // claim ids alerted during this viewing
@@ -542,6 +542,17 @@
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg?.type !== 'STATE' || msg.state?.videoId !== currentVideoId) return;
     Overlay.setStatus(statusFromState(msg.state));
+    if (msg.state.status === 'error' && msg.state.limitHit) {
+      const resetAt = msg.state.limitResetAt;
+      let when = '';
+      if (resetAt && resetAt > Date.now()) {
+        const mins = Math.ceil((resetAt - Date.now()) / 60000);
+        when = ` Resets in ${mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`}.`;
+      }
+      Overlay.showBanner(`Usage limit reached — FactFlag has stopped checking.${when}`, msg.state.error);
+    } else {
+      Overlay.hideBanner();
+    }
     // Only FALSE claims are shown on the video.
     falseClaims = msg.state.claims.filter((c) => c.verdict === 'FALSE');
     Overlay.setClaims(falseClaims);

@@ -2,14 +2,14 @@
 
 A Brave/Chrome extension (Manifest V3) that fact-checks YouTube videos and flags false claims at the moment they're said. Personal use, loaded unpacked — no server, no Web Store.
 
-**Status: Phase 3+** — finds checkable claims, screens them, web-searches the ones that might be wrong (Tavily), and asks the verdict model for a verdict using only the search results. **Only FALSE claims are shown.** Right after the speaker finishes saying one, an alert card pops up in the top-right of the video (claim, speaker's words, what the source says, clickable source, and a **Copy** button for double-checking it yourself) and closes by itself after 10 seconds (hovering keeps it open). FALSE claims also get red triangles on the progress bar; clicking one jumps there and reopens its card.
+**Status: Phase 3+** — finds checkable claims, screens them, web-searches the ones that might be wrong (Tavily), and asks the verdict model for a verdict using only the search results. **Only FALSE claims are shown.** Right after the speaker finishes saying one, a ding plays and the claims list opens on it, flashing red (claim, speaker's words, what the source says, clickable source, and a **Copy** button for double-checking it yourself). FALSE claims also get red triangles on the progress bar; clicking one jumps there and shows it in the list. If a usage limit is hit, a red banner on the video says so (and when it resets, if OpenAI says).
 
 **Saving the free tiers:**
 - *Just in time:* FactFlag only works on the ~75 seconds ahead of where you're listening (`checkAheadSeconds` in `prompts.js`; more at faster playback, and it widens itself if a verdict nearly arrives late). Pausing costs nothing; abandoning a video costs only what you heard.
 - *Triage:* before searching, the verdict model screens each claim; ones it is highly confident are true aren't searched. Turn off with `triageEnabled: false` in `prompts.js`.
 - *Budget meter:* the toolbar badge shows Tavily searches left this month; the settings page shows Tavily and Groq usage.
 
-**Click the status line** on the video to open a list of every claim checked so far — verdict, explanation, source, and why a claim was *not* flagged. Click a time to jump there. With **Live** on (the default; toggle it in the list's header or on the settings page), the list fills in as you watch: each claim appears right after it's said, newest on top, with a short highlight. Every verdict is also printed in the YouTube console (filter by `FactFlag`).
+**Click the status line** on the video to open a list of every claim checked so far — verdict, explanation, source, and why a claim was *not* flagged. Click a time to jump there. With **Live** on (the default; toggle it in the list's header or on the settings page), the list fills in as you watch: each claim appears right after it's said, newest on top, with a short highlight. With **Auto-open** on (the default), the list opens by itself whenever a claim is said and stays open; off, it opens only for FALSE claims and closes after 10 seconds (hovering keeps it open). Every verdict is also printed in the YouTube console (filter by `FactFlag`).
 
 ## Tweaking the AI prompts
 

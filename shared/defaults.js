@@ -10,6 +10,9 @@ self.FACTFLAG_DEFAULTS = {
   // Claims list fills in live (each claim appears right after it's said);
   // off = show every claim found so far, including ones ahead.
   liveList: true,
+  // Open the claims list by itself whenever a new claim is said (it stays
+  // open). Off = it opens only for FALSE claims, and closes after 10 s.
+  autoOpenList: true,
   groqApiKey: '',
   tavilyApiKey: '',
   // Fast model: finds checkable claims in transcript chunks.

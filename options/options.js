@@ -13,12 +13,13 @@ async function load() {
   $('enabled').checked = !!s.enabled;
   $('soundEnabled').checked = !!s.soundEnabled;
   $('liveList').checked = !!s.liveList;
+  $('autoOpenList').checked = !!s.autoOpenList;
   $('provider').value = s.provider || 'chatgpt';
   updateProviderNote();
 }
 
 async function save() {
-  const values = { enabled: $('enabled').checked, soundEnabled: $('soundEnabled').checked, liveList: $('liveList').checked, provider: $('provider').value };
+  const values = { enabled: $('enabled').checked, soundEnabled: $('soundEnabled').checked, liveList: $('liveList').checked, autoOpenList: $('autoOpenList').checked, provider: $('provider').value };
   for (const f of FIELDS) values[f] = $(f).value.trim();
   if (!values.detectionModel) values.detectionModel = D.detectionModel;
   if (!values.verdictModel) values.verdictModel = D.verdictModel;
@@ -189,7 +190,7 @@ function chatgptBreakdown(steps) {
   const table = document.createElement('table');
   table.className = 'steps';
   const head = table.insertRow();
-  for (const h of ['Step', 'Model', 'Requests', 'Tokens in / out', 'Share of usage (est.)']) {
+  for (const h of ['Step', 'Model', 'Requests', 'Web searches', 'Tokens in / out', 'Share of usage (est.)']) {
     const th = document.createElement('th');
     th.textContent = h;
     head.appendChild(th);
@@ -198,7 +199,7 @@ function chatgptBreakdown(steps) {
   for (const x of rows) {
     const tr = table.insertRow();
     const share = Number.isFinite(x.credits) && total ? `${Math.round((x.credits / total) * 100)}%` : 'unknown model';
-    for (const v of [STEP_NAMES[x.step] || x.step, x.model, fmt(x.requests),
+    for (const v of [STEP_NAMES[x.step] || x.step, x.model, fmt(x.requests), fmt(x.searches || 0),
       `${fmt(x.input)} / ${fmt(x.output)}`, share]) {
       tr.insertCell().textContent = v;
     }
@@ -269,6 +270,7 @@ $('resetModels').addEventListener('click', () => {
 $('enabled').addEventListener('change', save);
 $('soundEnabled').addEventListener('change', save);
 $('liveList').addEventListener('change', save);
+$('autoOpenList').addEventListener('change', save);
 $('provider').addEventListener('change', () => { updateProviderNote(); save(); });
 
 function updateProviderNote() {

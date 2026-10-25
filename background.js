@@ -162,7 +162,7 @@ function fill(template, values) {
 async function aiJson(settings, role, { system, user, schemaName, schema, reasoningEffort, onWait, webSearch }) {
   if (settings.provider === 'chatgpt') {
     const r = await chatgptJson({ system, user, schemaName, schema, reasoningEffort, webSearch, role });
-    recordChatGPTCall(r.usage, schemaName, r.model);
+    recordChatGPTCall(r.usage, schemaName, r.model, r.webSearches);
     return r;
   }
   const model = role === 'fast' ? settings.detectionModel : settings.verdictModel;
@@ -780,6 +780,11 @@ async function runJob(job) {
     console.error(LOG, `Checking stopped for ${job.videoId}:`, e.message);
     state.status = 'error';
     state.error = e.message;
+    // A plan / daily usage limit (not a bad key or sign-in problem): the page
+    // shows a banner for it.
+    state.limitHit = e.code === 'subscription_sharing_usage_limit_exceeded' ||
+      (isFatal(e) && /limit/i.test(e.message) && !/sign in|key/i.test(e.message));
+    state.limitResetAt = state.limitHit && e.resetSeconds ? Date.now() + e.resetSeconds * 1000 : null;
     state.note = '';
     await saveState(state);
   } finally {
@@ -839,6 +844,7 @@ async function ensureJob(videoId, { playhead, rate, segments, meta }) {
     for (const c of state.claims) if (c.status === 'checking') c.status = 'pending';
     state.status = 'working';
     state.error = '';
+    state.limitHit = false;
     state.note = '';
 
     Object.assign(job, { state, chunks, meta, concepts: new Set(state.concepts || []) });
