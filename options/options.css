@@ -20,6 +20,9 @@ button#save { background: var(--accent); color: #fff; border-color: var(--accent
 #status.ok { color: var(--ok); }
 #status.err { color: var(--accent); }
 h2 { font-size: 18px; margin-top: 32px; }
+.badge { font-size: 11px; font-weight: 600; text-transform: uppercase; border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; vertical-align: middle; color: var(--muted); }
+select { width: 100%; box-sizing: border-box; padding: 8px; margin-top: 4px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; font: inherit; }
+a { color: inherit; }
 .meter { margin: 12px 0; }
 .meter-label { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
 .meter-label span:last-child { color: var(--muted); text-align: right; }

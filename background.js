@@ -1,6 +1,6 @@
 // FactFlag background service worker.
 // All calls to outside APIs (Groq, Tavily) happen here, never in the content script.
-importScripts('shared/defaults.js', 'prompts.js', 'lib/groq.js', 'lib/tavily.js', 'lib/budget.js');
+importScripts('shared/defaults.js', 'prompts.js', 'lib/groq.js', 'lib/tavily.js', 'lib/budget.js', 'lib/chatgpt.js');
 
 const GROQ_BASE = 'https://api.groq.com/openai/v1';
 const CHUNK_SECONDS = 60;   // transcript is scanned for claims a minute at a time
@@ -778,6 +778,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       })
       .catch((e) => ({ ok: false, error: `Network error: ${e.message}` }))
       .then(sendResponse);
+    return true;
+  }
+  // ---- ChatGPT plan (experimental; settings-page test only for now) ----
+  const chatgptActions = {
+    CHATGPT_STATUS: () => chatgptStatus(),
+    CHATGPT_SIGN_IN: () => chatgptSignIn(),
+    CHATGPT_SIGN_OUT: () => chatgptSignOut(),
+    CHATGPT_MODELS: () => chatgptModels(),
+    CHATGPT_SET_MODEL: () => chatgptSetModel(msg.model),
+    CHATGPT_TEST: () => chatgptTest()
+  };
+  if (chatgptActions[msg?.type]) {
+    chatgptActions[msg.type]()
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((e) => sendResponse({ ok: false, error: e.message }));
     return true;
   }
   if (msg?.type === 'GET_BUDGET') {

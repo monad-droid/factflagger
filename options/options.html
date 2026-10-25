@@ -47,6 +47,28 @@
     <p id="status" role="status"></p>
     <pre id="details" hidden></pre>
 
+    <h2>ChatGPT plan <span class="badge">test</span></h2>
+    <p class="note">
+      Use your own ChatGPT Plus or Pro plan instead of paying per use. Requests count against your plan's
+      usage limits (on Plus, a five-hour limit shared with your other ChatGPT plan use). When a limit is hit,
+      requests simply stop — OpenAI doesn't charge extra unless you turn on "use credits after plan limits" for
+      FactFlag in <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener">ChatGPT settings → Usage</a>.
+      For now this is a test only: video checking still uses Groq + Tavily.
+    </p>
+    <p id="cgStatus" class="note">Checking…</p>
+    <div class="actions">
+      <button type="button" id="cgSignIn">Continue with ChatGPT</button>
+      <button type="button" id="cgSignOut" hidden>Sign out of ChatGPT</button>
+    </div>
+    <div id="cgModelRow" hidden>
+      <label for="cgModel">ChatGPT model</label>
+      <select id="cgModel"></select>
+      <div class="actions">
+        <button type="button" id="cgTest">Test ChatGPT (one fact-check with web search)</button>
+      </div>
+    </div>
+    <pre id="cgResult" hidden></pre>
+
     <h2>Free budget</h2>
     <div id="budget"><p class="note">Loading…</p></div>
     <p class="note">

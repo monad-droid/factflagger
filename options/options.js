@@ -54,6 +54,79 @@ async function testTavily() {
   setStatus(`Tavily key works.${usage}`, 'ok');
 }
 
+// ---- ChatGPT plan ----
+const cg = (type, extra) => chrome.runtime.sendMessage({ type, ...extra });
+
+async function loadChatGPT() {
+  const r = await cg('CHATGPT_STATUS');
+  const st = r?.result || {};
+  $('cgSignIn').hidden = st.signedIn;
+  $('cgSignOut').hidden = !st.signedIn;
+  $('cgModelRow').hidden = !(st.signedIn && st.planEnabled);
+  if (!st.signedIn) {
+    $('cgStatus').textContent = 'Not connected.';
+    return;
+  }
+  $('cgStatus').textContent = st.planEnabled
+    ? `Connected as ${st.email || 'your ChatGPT account'} — plan use allowed.`
+    : `Signed in as ${st.email || 'your ChatGPT account'}, but plan use wasn't allowed. Sign out and sign in again, and allow it.`;
+  if (!st.planEnabled) return;
+  const m = await cg('CHATGPT_MODELS');
+  const select = $('cgModel');
+  select.textContent = '';
+  if (!m?.ok) {
+    $('cgStatus').textContent += ` (Couldn't list models: ${m?.error})`;
+    return;
+  }
+  for (const model of m.result) {
+    const opt = document.createElement('option');
+    opt.value = model.slug;
+    opt.textContent = model.name;
+    select.appendChild(opt);
+  }
+  if (st.model && m.result.some((x) => x.slug === st.model)) select.value = st.model;
+  else if (m.result[0]) await cg('CHATGPT_SET_MODEL', { model: m.result[0].slug });
+}
+
+$('cgSignIn').addEventListener('click', async () => {
+  $('cgStatus').textContent = 'A ChatGPT sign-in tab opened — finish there, then come back here.';
+  const r = await cg('CHATGPT_SIGN_IN');
+  if (!r?.ok) $('cgStatus').textContent = `Sign-in failed: ${r?.error}`;
+  await loadChatGPT();
+  if (!r?.ok) $('cgStatus').textContent = `Sign-in failed: ${r?.error}`;
+});
+$('cgSignOut').addEventListener('click', async () => {
+  const r = await cg('CHATGPT_SIGN_OUT');
+  await loadChatGPT();
+  if (r?.ok && !r.result.revoked) {
+    $('cgStatus').textContent += ' (Couldn\'t confirm sign-out with OpenAI — you can disconnect FactFlag in ChatGPT settings.)';
+  }
+});
+$('cgModel').addEventListener('change', () => cg('CHATGPT_SET_MODEL', { model: $('cgModel').value }));
+$('cgTest').addEventListener('click', async () => {
+  const out = $('cgResult');
+  out.hidden = false;
+  out.textContent = 'Running one fact-check on your ChatGPT plan…';
+  const r = await cg('CHATGPT_TEST');
+  if (!r?.ok) { out.textContent = `Test failed: ${r?.error}`; return; }
+  const t = r.result;
+  out.textContent = [
+    `Model: ${t.model}`,
+    `Time: ${t.seconds} s`,
+    `Web search allowed: ${t.webSearchAllowed ? 'yes' : `NO — ${t.webSearchError}`}`,
+    `Web searches made: ${t.webSearchesMade}`,
+    '',
+    `Claim: ${t.claim}`,
+    t.verdict ? `Verdict: ${t.verdict.verdict}` : `Raw answer: ${t.rawText}`,
+    t.verdict ? `Why: ${t.verdict.explanation}` : '',
+    t.verdict ? `Source says: "${t.verdict.evidence_quote}"` : '',
+    t.verdict ? `Source: ${t.verdict.source_url}` : '',
+    '',
+    `Citations: ${t.citations.map((c) => c.url).join(', ') || 'none'}`
+  ].filter((l, i, a) => l !== '' || a[i - 1] !== '').join('\n');
+});
+loadChatGPT();
+
 // ---- Free budget meter ----
 function meter(label, left, total, detail) {
   const wrap = document.createElement('div');
