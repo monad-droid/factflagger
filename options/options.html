@@ -13,6 +13,12 @@
     <label class="toggle">
       <input type="checkbox" id="enabled"> FactFlag is on
     </label>
+    <div class="row">
+      <label class="toggle">
+        <input type="checkbox" id="soundEnabled"> Play a sound when a false claim is flagged
+      </label>
+      <button type="button" id="testSound">Test sound</button>
+    </div>
 
     <label for="groqApiKey">Groq API key</label>
     <div class="row">
@@ -52,6 +58,7 @@
     <button type="button" id="refreshBudget">Refresh</button>
   </main>
   <script src="../shared/defaults.js"></script>
+  <script src="../shared/ding.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

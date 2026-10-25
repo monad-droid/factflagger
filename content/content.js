@@ -432,6 +432,20 @@
     }
   }
 
+  // ---- Optional sound with each alert (setting can change at any time) ----
+  let soundOn = self.FACTFLAG_DEFAULTS.soundEnabled;
+  chrome.storage.local.get('soundEnabled').then((s) => {
+    if (typeof s.soundEnabled === 'boolean') soundOn = s.soundEnabled;
+  }).catch(() => {});
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.soundEnabled) soundOn = !!changes.soundEnabled.newValue;
+  });
+
+  function alertFalseClaim(c) {
+    Overlay.alert(c);
+    if (soundOn && self.factflagDing()) console.info(LOG, `ding — FALSE claim at ${fmtTime(c.t)}`);
+  }
+
   // ---- Pop-up alert when playback reaches a FALSE claim ----
   const LATE_ALERT_SECONDS = 15; // verdict arrived just after the claim was said
   const AFTER_SENTENCE_SECONDS = 0.5; // small pause after the speaker finishes
@@ -468,7 +482,7 @@
     for (const c of falseClaims) {
       if (!alerted.has(c.id) && alertAt(c) > prev && alertAt(c) <= now) {
         alerted.add(c.id);
-        Overlay.alert(c);
+        alertFalseClaim(c);
       }
     }
   }
@@ -493,7 +507,7 @@
         if (heard && !alerted.has(c.id) && v.currentTime >= alertAt(c) &&
             v.currentTime - alertAt(c) <= LATE_ALERT_SECONDS) {
           alerted.add(c.id);
-          Overlay.alert(c);
+          alertFalseClaim(c);
         }
       }
     }

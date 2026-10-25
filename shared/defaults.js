@@ -2,6 +2,8 @@
 // API keys are never given defaults — the user enters them on the settings page.
 self.FACTFLAG_DEFAULTS = {
   enabled: true,
+  // Play a short sound when a FALSE-claim card pops up.
+  soundEnabled: true,
   groqApiKey: '',
   tavilyApiKey: '',
   // Fast model: finds checkable claims in transcript chunks.

@@ -11,10 +11,11 @@ async function load() {
   const s = { ...D, ...(await chrome.storage.local.get(Object.keys(D))) };
   for (const f of FIELDS) $(f).value = s[f] || '';
   $('enabled').checked = !!s.enabled;
+  $('soundEnabled').checked = !!s.soundEnabled;
 }
 
 async function save() {
-  const values = { enabled: $('enabled').checked };
+  const values = { enabled: $('enabled').checked, soundEnabled: $('soundEnabled').checked };
   for (const f of FIELDS) values[f] = $(f).value.trim();
   if (!values.detectionModel) values.detectionModel = D.detectionModel;
   if (!values.verdictModel) values.verdictModel = D.verdictModel;
@@ -135,4 +136,6 @@ $('resetModels').addEventListener('click', () => {
   save();
 });
 $('enabled').addEventListener('change', save);
+$('soundEnabled').addEventListener('change', save);
+$('testSound').addEventListener('click', () => self.factflagDing());
 load();

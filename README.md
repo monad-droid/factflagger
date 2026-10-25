@@ -32,6 +32,7 @@ All prompts live in **`prompts.js`**. Edit it in any text editor, then reload th
 - **Verdict model** (stronger) — default `openai/gpt-oss-120b`
 - **Tavily API key** — from https://app.tavily.com
 - **On/off toggle**
+- **Sound** — plays a short ding when a FALSE card pops up (on by default; *Test sound* button to hear it)
 
 Click **Test Groq key & models** to check that your key works and both model IDs exist on your account. If a model is missing, the page lists the ones that are available. **Test Tavily key** checks the Tavily key and shows credits used this month (it doesn't spend any).
 
