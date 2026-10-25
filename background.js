@@ -208,21 +208,32 @@ async function detectClaimsInChunk(chunk, meta, settings, concepts, onWait) {
     if (clean && clean.length <= 60) concepts.add(clean);
   }
   // Backstop: drop claims that are really about one of the speaker's own
-  // metaphors. Only multi-word names, so a vague one like "brain" can't
-  // wipe out real claims.
-  const aboutConcept = (c) => [...concepts].some((name) =>
-    name.split(/\s+/).length >= 2 && c.claim.toLowerCase().includes(name.toLowerCase()));
+  // metaphors. Only names that look coined — two or more words, each
+  // Capitalized ("Instant Gratification Monkey", "Dark Playground") — so a topic
+  // the model mislabels as a metaphor ("seed oils", "domestic violence") can't
+  // wipe out every real claim about that topic.
+  const coined = [...concepts].filter((name) => {
+    const words = name.split(/\s+/).filter((w) => /[a-z]/i.test(w));
+    return words.length >= 2 && words.every((w) => /^[A-Z]/.test(w));
+  });
+  const aboutConcept = (c) => coined.find((name) => c.claim.toLowerCase().includes(name.toLowerCase()));
 
   const claims = Array.isArray(json.claims) ? json.claims : [];
   const valid = claims.filter((c) => c && typeof c.claim === 'string' && c.claim.trim());
   // Drop claims outside this chunk (e.g. taken from the context lines by mistake).
   const inChunk = (c) => Number(c.t) >= Math.floor(chunk.start) && Number(c.t) <= chunk.end;
-  const kept = valid.filter((c) =>
-    inChunk(c) && Number(c.checkworthiness) >= P.minCheckworthiness && !aboutConcept(c));
-  if (valid.length !== kept.length) {
-    console.info(LOG, `chunk ${fmtTime(chunk.start)}: dropped ${valid.length - kept.length} claim(s) ` +
-      '(low score, outside this section, or about the speaker\'s own metaphors)');
+  const kept = [];
+  const dropped = { score: 0, outside: 0, metaphor: [] };
+  for (const c of valid) {
+    if (!inChunk(c)) dropped.outside++;
+    else if (Number(c.checkworthiness) < P.minCheckworthiness) dropped.score++;
+    else if (aboutConcept(c)) dropped.metaphor.push(aboutConcept(c));
+    else kept.push(c);
   }
+  console.info(LOG, `chunk ${fmtTime(chunk.start)}: model found ${valid.length} claim(s), kept ${kept.length}` +
+    (dropped.score ? ` · ${dropped.score} scored below ${P.minCheckworthiness}` : '') +
+    (dropped.outside ? ` · ${dropped.outside} outside this section` : '') +
+    (dropped.metaphor.length ? ` · ${dropped.metaphor.length} about the speaker's metaphors (${[...new Set(dropped.metaphor)].join(', ')})` : ''));
   return kept
     .sort((a, b) => b.checkworthiness - a.checkworthiness)
     .slice(0, P.maxClaimsPerChunk)
@@ -589,7 +600,11 @@ async function runJob(job) {
           const fails = (chunkFailures.get(work.index) || 0) + 1;
           chunkFailures.set(work.index, fails);
           console.warn(LOG, `Scanning section ${work.index + 1} failed (${e.message})${fails >= 2 ? ' — skipping it' : ' — will retry'}`);
-          if (fails >= 2) state.chunksDone.push(work.index);
+          if (fails >= 2) {
+            state.chunksDone.push(work.index);
+            state.sectionsFailed = (state.sectionsFailed || 0) + 1;
+            state.lastSectionError = e.message;
+          }
           else await new Promise((r) => setTimeout(r, 5000));
         }
       } else {

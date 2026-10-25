@@ -327,9 +327,13 @@
     const resolved = state.claims.filter((c) => ['done', 'error', 'skipped'].includes(c.status)).length;
     const searched = state.claims.filter((c) => c.status === 'done' || c.status === 'error').length;
     const falseCount = state.claims.filter((c) => c.verdict === 'FALSE').length;
-    const counts = resolved
+    const found = state.claims.length;
+    let counts = resolved
       ? `${resolved} claim${resolved === 1 ? '' : 's'} checked · ${searched} searched · ${falseCount} false`
-      : 'no checkable claims yet';
+      : found ? `${found} claim${found === 1 ? '' : 's'} found, checking…` : 'no checkable claims yet';
+    if (state.sectionsFailed) {
+      counts += ` · ${state.sectionsFailed} section${state.sectionsFailed === 1 ? '' : 's'} failed: ${state.lastSectionError}`;
+    }
     if (state.status === 'error') return `${state.error} · ${counts}`;
     if (state.status === 'done') return `Done · ${counts}`;
     if (state.status === 'idle') return `Up to date · ${counts}`;
