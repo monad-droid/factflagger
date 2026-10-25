@@ -133,7 +133,7 @@
 .factflag-glow {
   position: absolute; inset: 0; z-index: 70; pointer-events: none; border-radius: inherit;
   --glow: 100, 210, 255;
-  box-shadow: inset 0 0 28px 4px rgba(var(--glow), 0.55), inset 0 0 3px 1px rgba(var(--glow), 0.7);
+  box-shadow: inset 0 0 36px 2px rgba(var(--glow), 0.28);
   animation: factflag-glow 4s ease-in-out forwards;
 }
 .factflag-glow-false { --glow: 255, 69, 58; }
@@ -142,8 +142,7 @@
 .factflag-glow-unverifiable { --glow: 100, 210, 255; }
 @keyframes factflag-glow {
   0% { opacity: 0; }
-  20% { opacity: 1; }
-  40% { opacity: 0.75; }
-  55% { opacity: 1; }
+  30% { opacity: 1; }
+  60% { opacity: 0.8; }
   100% { opacity: 0; }
 }
