@@ -38,3 +38,4 @@ table.steps th, table.steps td { border: 1px solid #ddd; padding: 3px 8px; text-
 .sub[hidden] { display: none; }
 .sub label.toggle { font-weight: 400; }
 .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+label.inline { margin: 0; font-weight: 600; }

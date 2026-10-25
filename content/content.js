@@ -498,9 +498,8 @@
 
   // ---- Alert (claims list opens on it, plus the ding) when playback reaches a FALSE claim ----
   const LATE_ALERT_SECONDS = 15; // verdict arrived just after the claim was said
-  const AFTER_SENTENCE_SECONDS = 0.5; // small pause after the speaker finishes
-  // The alert comes right after the claim has been fully said.
-  const alertAt = (c) => (Number.isFinite(c.tEnd) ? c.tEnd : c.t) + AFTER_SENTENCE_SECONDS;
+  // When the alert comes (start or end of the claim) is set in settings.
+  const alertAt = (c) => Overlay.alertMoment(c);
   let falseClaims = [];
   const alerted = new Set();     // claim ids alerted during this viewing
   const knownFalse = new Set();  // claim ids already known to be FALSE

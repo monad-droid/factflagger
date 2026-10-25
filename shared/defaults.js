@@ -17,6 +17,9 @@ self.FACTFLAG_DEFAULTS = {
   // edge fades in and out in the verdict's colour. No words until you open
   // the list yourself.
   glowMode: false,
+  // When alerts (pop-up, glow, ding, live list row) come: 'end' = right after
+  // the speaker finishes the claim; 'start' = as they begin saying it.
+  alertTiming: 'end',
   // Which verdicts glow in glow mode (fewer = less distraction).
   glowFalse: true,
   glowMisleading: true,

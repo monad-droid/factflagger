@@ -57,11 +57,13 @@ self.FactFlagOverlay = (() => {
   let liveList = self.FACTFLAG_DEFAULTS.liveList;
   let autoOpenList = self.FACTFLAG_DEFAULTS.autoOpenList;
   let glowMode = self.FACTFLAG_DEFAULTS.glowMode;
+  let alertTiming = self.FACTFLAG_DEFAULTS.alertTiming;
   // Which verdicts glow, e.g. { false: true, true: false, ... }.
   const GLOW_KEYS = { false: 'glowFalse', misleading: 'glowMisleading', true: 'glowTrue', unverifiable: 'glowUnverifiable' };
   const glowOn = {};
   for (const [kind, key] of Object.entries(GLOW_KEYS)) glowOn[kind] = self.FACTFLAG_DEFAULTS[key];
-  chrome.storage.local.get(['liveList', 'autoOpenList', 'glowMode', ...Object.values(GLOW_KEYS)]).then((s) => {
+  chrome.storage.local.get(['liveList', 'autoOpenList', 'glowMode', 'alertTiming', ...Object.values(GLOW_KEYS)]).then((s) => {
+    if (s.alertTiming === 'start' || s.alertTiming === 'end') alertTiming = s.alertTiming;
     if (typeof s.liveList === 'boolean') liveList = s.liveList;
     if (typeof s.autoOpenList === 'boolean') autoOpenList = s.autoOpenList;
     if (typeof s.glowMode === 'boolean') glowMode = s.glowMode;
@@ -71,6 +73,7 @@ self.FactFlagOverlay = (() => {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     for (const [kind, key] of Object.entries(GLOW_KEYS)) if (changes[key]) glowOn[kind] = !!changes[key].newValue;
+    if (changes.alertTiming) alertTiming = changes.alertTiming.newValue === 'start' ? 'start' : 'end';
     if (!changes.liveList && !changes.autoOpenList && !changes.glowMode) return;
     if (changes.liveList) liveList = !!changes.liveList.newValue;
     if (changes.glowMode) glowMode = !!changes.glowMode.newValue;
@@ -81,7 +84,12 @@ self.FactFlagOverlay = (() => {
     if (listOpen) renderList();
   });
   // Claims playback has passed the end of (whatever the Live setting).
-  const said = (c) => (video()?.currentTime || 0) >= (c.tEnd || c.t) + 0.5;
+  // The moment a claim counts as said: as the speaker starts it, or just after
+  // they finish it (the "Alert at" setting). Used for every alert.
+  const alertMoment = (c) => (alertTiming === 'start'
+    ? c.t
+    : (Number.isFinite(c.tEnd) ? c.tEnd : c.t) + 0.5);
+  const said = (c) => (video()?.currentTime || 0) >= alertMoment(c);
   // Only claims with a result are listed — never ones still queued or being checked.
   const ready = (c) => c.status === 'done' || c.status === 'skipped' || c.status === 'error';
   const heard = (c) => ready(c) && (!liveList || revealed.has(c.id) || said(c));
@@ -241,7 +249,7 @@ self.FactFlagOverlay = (() => {
     const t = video()?.currentTime || 0;
     const now = new Set(allClaims.filter((c) => ready(c) && said(c)).map((c) => c.id));
     const fresh = allClaims.filter((c) => now.has(c.id) && !readyIds.has(c.id) &&
-      t - ((c.tEnd || c.t) + 0.5) < AUTO_OPEN_LATE_SECONDS);
+      t - alertMoment(c) < AUTO_OPEN_LATE_SECONDS);
     readyIds = now;
     if (!fresh.length) return false;
     if (glowMode) {
@@ -555,6 +563,7 @@ self.FactFlagOverlay = (() => {
   return {
     alert: alertClaim,
     clearAlerts,
+    alertMoment,
     showBanner,
     hideBanner,
     setStatus(text) {
