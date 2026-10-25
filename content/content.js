@@ -130,8 +130,13 @@
     return [...new Set(found)];
   }
 
+  // The transcript list's own scroll box. Never the page itself or anything
+  // that contains the video — scrolling those would move the whole page.
   function scrollableAncestor(el) {
+    const playerEl = document.getElementById('movie_player');
     for (let n = el?.parentElement; n; n = n.parentElement) {
+      if (n === document.body || n === document.documentElement || n === document.scrollingElement) return null;
+      if (playerEl && n.contains(playerEl)) return null;
       const oy = getComputedStyle(n).overflowY;
       if ((oy === 'auto' || oy === 'scroll') && n.scrollHeight > n.clientHeight) return n;
     }
@@ -165,7 +170,29 @@
   async function scrapeTranscriptPanel(token) {
     const scrollX = window.scrollX;
     const scrollY = window.scrollY;
-    const restoreScroll = () => window.scrollTo(scrollX, scrollY);
+    const restoreScroll = () => {
+      if (window.scrollX !== scrollX || window.scrollY !== scrollY) window.scrollTo(scrollX, scrollY);
+    };
+    // While we work (and for 2 s after), undo any page scroll the viewer didn't
+    // make themselves — YouTube can move the page well after a click.
+    let userScrolled = false;
+    const onUserInput = (e) => {
+      if (e.type !== 'keydown' || ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(e.key)) {
+        userScrolled = true;
+      }
+    };
+    const onScroll = () => { if (!userScrolled) restoreScroll(); };
+    const inputEvents = ['wheel', 'touchmove', 'keydown', 'mousedown'];
+    for (const ev of inputEvents) window.addEventListener(ev, onUserInput, { capture: true, passive: true });
+    window.addEventListener('scroll', onScroll, { passive: true });
+    // Scroll events can be delayed (e.g. in background tabs), so also check often.
+    const poll = setInterval(onScroll, 100);
+    const stopGuard = () => {
+      clearInterval(poll);
+      window.removeEventListener('scroll', onScroll);
+      for (const ev of inputEvents) window.removeEventListener(ev, onUserInput, { capture: true });
+    };
+
     let expandedDescription = false;
     try {
       return await readTranscriptPanel(token, restoreScroll, () => { expandedDescription = true; });
@@ -173,9 +200,8 @@
       if (expandedDescription) {
         document.querySelector('ytd-text-inline-expander #collapse, #description-inline-expander #collapse')?.click();
       }
-      restoreScroll();
-      // YouTube sometimes scrolls again a moment later as the layout settles.
-      setTimeout(restoreScroll, 300);
+      if (!userScrolled) restoreScroll();
+      setTimeout(stopGuard, 2000);
     }
   }
 
