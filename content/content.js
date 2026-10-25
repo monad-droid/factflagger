@@ -184,7 +184,12 @@
         userScrolled = true;
       }
     };
-    const onScroll = () => { if (!userScrolled) restoreScroll(); };
+    let pageMoves = 0;
+    const onScroll = () => {
+      if (userScrolled || (window.scrollX === scrollX && window.scrollY === scrollY)) return;
+      pageMoves++;
+      restoreScroll();
+    };
     const inputEvents = ['wheel', 'touchmove', 'keydown'];
     for (const ev of inputEvents) window.addEventListener(ev, onUserInput, { capture: true, passive: true });
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -196,6 +201,19 @@
       for (const ev of inputEvents) window.removeEventListener(ev, onUserInput, { capture: true });
     };
 
+    // Keep any panel we open off-screen and out of the page layout while we
+    // read it, so the sidebar doesn't shift and YouTube's "follow along"
+    // scrolling in the transcript can't drag the page. Panels the viewer
+    // already had open are left alone.
+    for (const panel of document.querySelectorAll(PANEL_SEL)) {
+      if (/EXPANDED/.test(panel.getAttribute('visibility') || '')) panel.setAttribute('data-factflag-keep', '');
+    }
+    const hideStyle = document.createElement('style');
+    hideStyle.textContent = `${PANEL_SEL}[visibility*="EXPANDED"]:not([data-factflag-keep]) {
+      position: fixed !important; left: -10000px !important; top: 0 !important;
+      width: 400px !important; height: 600px !important; }`;
+    document.documentElement.appendChild(hideStyle);
+
     let expandedDescription = false;
     try {
       return await readTranscriptPanel(token, restoreScroll, () => { expandedDescription = true; });
@@ -204,8 +222,40 @@
         document.querySelector('ytd-text-inline-expander #collapse, #description-inline-expander #collapse')?.click();
       }
       if (!userScrolled) restoreScroll();
-      setTimeout(stopGuard, 5000);
+      // Unhide once the panel has had time to close.
+      setTimeout(() => {
+        hideStyle.remove();
+        for (const panel of document.querySelectorAll('[data-factflag-keep]')) panel.removeAttribute('data-factflag-keep');
+      }, 1500);
+      setTimeout(() => {
+        stopGuard();
+        if (pageMoves) console.info(LOG, `Transcript reading: undid ${pageMoves} page move(s) YouTube made.`);
+        if (userScrolled) console.info(LOG, 'Transcript reading: you scrolled, so the page was left where you put it.');
+      }, 5000);
     }
+  }
+
+  // Close the panel we opened, and check it really closed — a panel left open
+  // keeps following the video and can move the page.
+  async function closePanel(panel) {
+    if (!panel) {
+      console.warn(LOG, 'Transcript panel: couldn\'t find the panel to close it.');
+      return;
+    }
+    const isOpen = () => {
+      const v = panel.getAttribute('visibility');
+      return v ? /EXPANDED/.test(v) : !!panel.getClientRects().length;
+    };
+    const buttons = [...panel.querySelectorAll('#visibility-button button, button[aria-label*="close" i], [aria-label*="close" i]')];
+    for (const b of buttons) {
+      b.click();
+      await sleep(300);
+      if (!isOpen()) return;
+    }
+    // Last resort: tell YouTube's panel to hide itself.
+    panel.setAttribute('visibility', 'ENGAGEMENT_PANEL_VISIBILITY_HIDDEN');
+    await sleep(300);
+    if (isOpen()) console.warn(LOG, `Transcript panel didn't close (target-id: ${panel.getAttribute('target-id')}).`);
   }
 
   async function readTranscriptPanel(token, restoreScroll, onExpanded) {
@@ -310,10 +360,7 @@
       text: s.text
     }));
 
-    if (openedByUs) {
-      const panel = rows[0].el.closest(PANEL_SEL);
-      panel?.querySelector('#visibility-button button, button[aria-label*="close" i]')?.click();
-    }
+    if (openedByUs) await closePanel(rows[0].el.closest(PANEL_SEL));
     return { ok: true, method: 'transcript-panel', segments };
   }
 
