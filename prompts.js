@@ -48,6 +48,7 @@ DO NOT extract any of these — they are NOT claims:
 - vague statements about people's character or feelings ("women are emotional", "everyone procrastinates", "we all have a deadline")
 - hypotheticals ("if we did X..."), predictions, and future promises
 - definitions, common knowledge, and trivially obvious facts ("there are 52 weeks in a year")
+- claims whose key term is vague or undefined, so there's nothing to measure ("women have more sexual access", "men have no power anymore", "society is more toxic", "X is better") — unless the speaker ties it to a specific number or study
 - questions, greetings, and calls to action
 
 ALWAYS EXTRACT these, even though they are about groups of people or recent events:
@@ -154,6 +155,8 @@ Verdicts:
 
 Rules:
 - When in doubt, choose UNVERIFIABLE. Never guess. Calling a true claim FALSE is the worst possible mistake.
+- If the claim's key term is vague or undefined (e.g. "sexual access", "power", "toxic"), no source can directly contradict it: choose UNVERIFIABLE.
+- Read the evidence literally. A source contradicts the claim only if what it says cannot be true at the same time as the claim. A source that is compatible with the claim, or even supports it, is NOT a contradiction.
 - Contested political or social claims (causes of unrest, immigration, crime, elections) need especially clear, specific contradicting facts for FALSE. One outlet's characterization or opinion is not enough.
 - Judge the speaker's actual words, including their qualifiers ("a lot of the time", "often", "about"), not just the one-sentence summary. If the summary is stronger, broader, or more absolute than what was said, judge what was actually said.
 - Judge the claim as of the date the video was published. A claim that was true then is not FALSE just because things changed later.
@@ -161,6 +164,32 @@ Rules:
 - "explanation": ONE plain-language sentence saying what the evidence shows, e.g. "Census data shows the population was 331 million, not 400 million."
 - "source_url": copy EXACTLY the URL of the single best result behind your verdict. Use an empty string for UNVERIFIABLE.
 - "evidence_quote": for FALSE or MISLEADING, copy WORD FOR WORD the sentence from that search result which contradicts the claim (it is checked automatically — a quote that isn't in the result cancels the verdict). Use an empty string for TRUE or UNVERIFIABLE.`,
+
+  // --------------------------------------------------------------------------
+  //  4. SECOND CHECK  (verdict model, no web search)
+  //  Before any FALSE card is shown, a separate call sees ONLY the claim and
+  //  the source's quoted sentence. Unless it answers "yes", the verdict is
+  //  downgraded to UNVERIFIABLE. It can only remove FALSE flags, never add them.
+  // --------------------------------------------------------------------------
+
+  contradictionReasoningEffort: 'medium',
+
+  contradictionSystem: `You double-check another fact-checker's work. You are given a CLAIM a speaker made and a QUOTE from a source that the fact-checker says proves the claim false.
+
+Answer one question: read literally, does the QUOTE directly contradict the CLAIM — i.e. could the quote and the claim NOT both be true at the same time?
+
+- "yes": the quote states something that directly rules out the claim (different number, date, fact, or the opposite conclusion about the same thing).
+- "no": the quote is compatible with the claim, supports it, or is about something different.
+- "unclear": it depends on interpretation, on how vague words are defined, or on information not in the quote.
+
+Use only the claim and the quote. Do not use outside knowledge. If you are not sure, answer "unclear".
+"reason": one short sentence.`,
+
+  // {{CLAIM}}, {{QUOTE}}, {{EVIDENCE}} are filled in automatically.
+  contradictionUser: `CLAIM: {{CLAIM}}
+Speaker's exact words: "{{QUOTE}}"
+
+QUOTE FROM THE SOURCE: "{{EVIDENCE}}"`,
 
   // {{TITLE}}, {{PUBLISHED}}, {{CLAIM}}, {{QUOTE}}, {{RESULTS}} are filled in automatically.
   verdictUser: `Video title: {{TITLE}}

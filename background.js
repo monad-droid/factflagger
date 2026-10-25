@@ -245,7 +245,7 @@ async function detectClaimsInChunk(chunk, meta, settings, concepts, onWait) {
         t: line.start,
         tEnd: claimEnd(chunk, line, c.quote),
         claim: c.claim.trim(),
-        quote: (c.quote || '').trim(),
+        quote: String(c.quote || '').trim().replace(/^["“”'‘’]+|["“”'‘’]+$/g, '').trim(),
         checkworthiness: Number(c.checkworthiness)
       };
     });
@@ -316,6 +316,17 @@ async function verifyClaim(claim, meta, settings, onWait) {
       explanation = `${explanation} (Not flagged: ${reason}.)`;
     }
   }
+  // Independent second check before a FALSE card can be shown.
+  if (verdict === 'FALSE') {
+    const check = await confirmContradiction(claim, evidenceQuote, settings, onWait);
+    if (check.answer !== 'yes') {
+      console.info(LOG, `verdict ${fmtTime(claim.t)}: FALSE downgraded to UNVERIFIABLE — second check said ` +
+        `"${check.answer}": ${check.reason}`);
+      verdict = 'UNVERIFIABLE';
+      explanation = `${explanation} (Not flagged: a second check found the source doesn't directly contradict ` +
+        `the claim — ${check.reason})`;
+    }
+  }
   return {
     verdict,
     explanation,
@@ -323,6 +334,40 @@ async function verifyClaim(claim, meta, settings, onWait) {
     sourceUrl: source?.url || '',
     sourceTitle: source?.title || ''
   };
+}
+
+const CONTRADICTION_SCHEMA = {
+  type: 'object',
+  properties: {
+    contradicts: { type: 'string', enum: ['yes', 'no', 'unclear'] },
+    reason: { type: 'string' }
+  },
+  required: ['contradicts', 'reason'],
+  additionalProperties: false
+};
+
+// Asks, with only the claim and the source's quote in view, whether the quote
+// really rules the claim out. Any failure counts as "not confirmed".
+async function confirmContradiction(claim, evidenceQuote, settings, onWait) {
+  const P = self.FACTFLAG_PROMPTS;
+  try {
+    const { json, usage, limits } = await groqChatJson({
+      apiKey: settings.groqApiKey,
+      model: settings.verdictModel,
+      system: P.contradictionSystem,
+      user: fill(P.contradictionUser, { CLAIM: claim.claim, QUOTE: claim.quote, EVIDENCE: evidenceQuote }),
+      schemaName: 'contradiction',
+      schema: CONTRADICTION_SCHEMA,
+      reasoningEffort: P.contradictionReasoningEffort,
+      onWait
+    });
+    recordGroqCall(settings.verdictModel, usage, limits);
+    const answer = ['yes', 'no', 'unclear'].includes(json.contradicts) ? json.contradicts : 'unclear';
+    return { answer, reason: String(json.reason || '').trim() || 'no reason given' };
+  } catch (e) {
+    if (isFatal(e)) throw e;
+    return { answer: 'unclear', reason: `second check failed (${e.message})` };
+  }
 }
 
 const normalizeText = (s) => s.toLowerCase()
@@ -420,7 +465,7 @@ async function triageClaims(claims, meta, settings, onWait) {
 const BEHIND_SLACK_SECONDS = 15; // a claim that started a moment ago is still being heard
 const MIN_LEAD_SECONDS = 10;     // a verdict ready with less time to spare than this is "too close"
 const LEAD_STEP_SECONDS = 15;    // how much to widen the window when that happens
-const STATE_VERSION = 6; // bump when the saved format, chunking or prompts change
+const STATE_VERSION = 7; // bump when the saved format, chunking or prompts change
 
 const videoKey = (videoId) => `video:${videoId}`;
 const transcriptKey = (videoId) => `transcript:${videoId}`;
