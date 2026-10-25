@@ -53,9 +53,6 @@ self.FactFlagOverlay = (() => {
   const revealed = new Set();
   // A FALSE claim that should flash once on the next render.
   let flashId = null;
-  // True while the list is open because a FALSE claim opened it; it closes
-  // itself after AUTO_CLOSE_MS unless hovered or used.
-  let autoOpened = false;
   let shownKey = '';
   let liveList = self.FACTFLAG_DEFAULTS.liveList;
   let autoOpenList = self.FACTFLAG_DEFAULTS.autoOpenList;
@@ -105,7 +102,7 @@ self.FactFlagOverlay = (() => {
 
   function toggleList() {
     listOpen = !listOpen;
-    stopAutoClose();
+    hidePeek();
     shownKey = '';
     renderStatus();
     renderList();
@@ -124,9 +121,6 @@ self.FactFlagOverlay = (() => {
     listEl.className = 'factflag-list';
     stopPlayerEvents(listEl);
     listEl.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true });
-    // Using the list (a click or scroll) keeps it open.
-    listEl.addEventListener('click', stopAutoClose);
-    listEl.addEventListener('wheel', stopAutoClose, { passive: true });
 
     const head = document.createElement('div');
     head.className = 'factflag-list-head';
@@ -145,17 +139,17 @@ self.FactFlagOverlay = (() => {
     auto.className = `factflag-live${autoOpenList ? ' on' : ''}`;
     auto.textContent = autoOpenList ? 'Auto-open' : 'Auto-open: off';
     auto.title = autoOpenList
-      ? 'This list opens for 10 seconds whenever a claim is said. Click to open it only for FALSE claims.'
-      : 'This list opens for 10 seconds only for FALSE claims. Click to open it for every claim.';
+      ? 'Each claim pops up for 10 seconds right after it is said. Click to pop up only FALSE claims.'
+      : 'Only FALSE claims pop up for 10 seconds. Click to pop up every claim.';
     auto.addEventListener('click', () => chrome.storage.local.set({ autoOpenList: !autoOpenList }));
     const glow = document.createElement('button');
     glow.className = `factflag-live${glowMode ? ' on' : ''}`;
     glow.textContent = glowMode ? 'Glow' : 'Glow: off';
     glow.title = glowMode
-      ? 'Glow mode: the video edge glows in the verdict colour instead of this list opening. Click to turn off.'
-      : 'Click for glow mode: the video edge glows in the verdict colour instead of this list opening.';
+      ? 'Glow mode: the video edge glows in the verdict colour instead of a pop-up. Click to turn off.'
+      : 'Click for glow mode: the video edge glows in the verdict colour instead of a pop-up.';
     glow.addEventListener('click', () => chrome.storage.local.set({ glowMode: !glowMode }));
-    // In glow mode the list never opens by itself, so Auto-open doesn't apply.
+    // In glow mode nothing pops up, so Auto-open doesn't apply.
     head.append(live, ...(glowMode ? [] : [auto]), glow);
     const close = document.createElement('button');
     close.className = 'factflag-card-close';
@@ -175,63 +169,12 @@ self.FactFlagOverlay = (() => {
     const firstRender = !shownKey;
     // Latest moment in the video first.
     for (const c of visible.sort((a, b) => b.t - a.t)) {
-      const row = document.createElement('div');
-      row.className = 'factflag-list-row';
-      row.dataset.id = c.id;
-      if (c.verdict === 'FALSE') row.classList.add('factflag-list-false');
+      const row = buildRow(c);
       if (c.id === flashId) row.classList.add('factflag-list-alert');
       else if (liveList && !firstRender && !shownIds.has(c.id)) row.classList.add('factflag-list-new');
-      const top = document.createElement('div');
-      top.className = 'factflag-list-top';
-      const time = document.createElement('button');
-      time.className = 'factflag-list-time';
-      time.textContent = fmtTime(c.t);
-      time.title = 'Jump to this moment';
-      time.addEventListener('click', () => { const v = video(); if (v) v.currentTime = c.t; });
-      const label = claimLabel(c);
-      const chip = line(`factflag-chip factflag-chip-${label.cls}`, label.text);
-      top.append(time, chip);
-      if (c.status === 'done') {
-        const copy = document.createElement('button');
-        copy.className = 'factflag-card-copy';
-        copy.textContent = 'Copy';
-        copy.title = 'Copy the claim, quote, link and source to double-check it yourself';
-        copy.addEventListener('click', async () => {
-          const ok = await copyToClipboard(copyText(c));
-          copy.textContent = ok ? 'Copied ✓' : 'Copy failed';
-          setTimeout(() => { copy.textContent = 'Copy'; }, 1800);
-        });
-        top.appendChild(copy);
-      }
-      row.appendChild(top);
-      row.appendChild(line('factflag-list-claim', c.claim));
-      if (c.verdict === 'FALSE' && c.quote) row.appendChild(line('factflag-list-quote', `Speaker: “${c.quote}”`));
-      const why = c.status === 'skipped' ? (c.triageReason ? `Screened as likely true: ${c.triageReason}` : '')
-        : c.status === 'error' ? c.error : c.explanation;
-      if (why) row.appendChild(line('factflag-list-why', why));
-      if (c.verdict === 'FALSE' && c.evidenceQuote) {
-        row.appendChild(line('factflag-list-quote', `Source says: “${c.evidenceQuote}”`));
-      }
-      if (c.sourceUrl) {
-        const src = document.createElement('div');
-        src.className = 'factflag-list-why';
-        const a = document.createElement('a');
-        a.href = c.sourceUrl;
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-        try { a.textContent = new URL(c.sourceUrl).hostname.replace(/^www\./, ''); } catch (_) { a.textContent = 'source'; }
-        src.append('Source: ', a);
-        row.appendChild(src);
-      }
       body.appendChild(row);
     }
     listEl.appendChild(body);
-    if (autoOpened) {
-      const timer = document.createElement('div');
-      timer.className = 'factflag-list-timer';
-      timer.style.width = `${Math.max(0, (autoRemaining / AUTO_CLOSE_MS) * 100)}%`;
-      listEl.appendChild(timer);
-    }
     p.appendChild(listEl);
     body.scrollTop = keepScroll;
     if (flashId) {
@@ -241,6 +184,57 @@ self.FactFlagOverlay = (() => {
     }
     shownIds = new Set(visible.map((c) => c.id));
     shownKey = listKey();
+  }
+
+  // One claim: time (click to jump), verdict, Copy, claim, why, source.
+  function buildRow(c) {
+    const row = document.createElement('div');
+    row.className = 'factflag-list-row';
+    row.dataset.id = c.id;
+    if (c.verdict === 'FALSE') row.classList.add('factflag-list-false');
+    const top = document.createElement('div');
+    top.className = 'factflag-list-top';
+    const time = document.createElement('button');
+    time.className = 'factflag-list-time';
+    time.textContent = fmtTime(c.t);
+    time.title = 'Jump to this moment';
+    time.addEventListener('click', () => { const v = video(); if (v) v.currentTime = c.t; });
+    const label = claimLabel(c);
+    const chip = line(`factflag-chip factflag-chip-${label.cls}`, label.text);
+    top.append(time, chip);
+    if (c.status === 'done') {
+      const copy = document.createElement('button');
+      copy.className = 'factflag-card-copy';
+      copy.textContent = 'Copy';
+      copy.title = 'Copy the claim, quote, link and source to double-check it yourself';
+      copy.addEventListener('click', async () => {
+        const ok = await copyToClipboard(copyText(c));
+        copy.textContent = ok ? 'Copied ✓' : 'Copy failed';
+        setTimeout(() => { copy.textContent = 'Copy'; }, 1800);
+      });
+      top.appendChild(copy);
+    }
+    row.appendChild(top);
+    row.appendChild(line('factflag-list-claim', c.claim));
+    if (c.verdict === 'FALSE' && c.quote) row.appendChild(line('factflag-list-quote', `Speaker: “${c.quote}”`));
+    const why = c.status === 'skipped' ? (c.triageReason ? `Screened as likely true: ${c.triageReason}` : '')
+      : c.status === 'error' ? c.error : c.explanation;
+    if (why) row.appendChild(line('factflag-list-why', why));
+    if (c.verdict === 'FALSE' && c.evidenceQuote) {
+      row.appendChild(line('factflag-list-quote', `Source says: “${c.evidenceQuote}”`));
+    }
+    if (c.sourceUrl) {
+      const src = document.createElement('div');
+      src.className = 'factflag-list-why';
+      const a = document.createElement('a');
+      a.href = c.sourceUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      try { a.textContent = new URL(c.sourceUrl).hostname.replace(/^www\./, ''); } catch (_) { a.textContent = 'source'; }
+      src.append('Source: ', a);
+      row.appendChild(src);
+    }
+    return row;
   }
 
   function listKey() {
@@ -261,13 +255,9 @@ self.FactFlagOverlay = (() => {
       glowFor(fresh);
       return false;
     }
-    if (!autoOpenList) return false;
-    if (listOpen && !autoOpened) return false; // the viewer opened it; leave it be
-    if (!listOpen) shownKey = '';
-    listOpen = true;
-    startAutoClose();
-    renderStatus();
-    renderList();
+    // The full list is open: its new rows already show up live.
+    if (listOpen || !autoOpenList) return false;
+    showPeek(fresh.find((c) => c.verdict === 'FALSE') || fresh.reduce((a, b) => (b.t > a.t ? b : a)));
     return true;
   }
 
@@ -363,7 +353,7 @@ self.FactFlagOverlay = (() => {
         const vid = video();
         if (vid) vid.currentTime = claim.t;
         hideTip();
-        showInList(claim, false); // show it in the list, e.g. to copy it
+        showInList(claim); // show it in the list, e.g. to copy it
       });
       layerEl.appendChild(m);
     }
@@ -418,60 +408,82 @@ self.FactFlagOverlay = (() => {
     }
   }
 
-  // ---- FALSE-claim alert: open the list on that claim ----
-  // How long a list opened by an alert stays up (hovering pauses the countdown).
-  const AUTO_CLOSE_MS = 10000;
-  let autoRemaining = 0;
-  let autoTick = null;
+  // ---- Pop-up: one claim's row, right after it's said, for 10 seconds ----
+  // The full list only opens when the viewer clicks the status line.
+  const PEEK_MS = 10000;
+  let peekEl = null;
+  let peekId = null;
+  let peekTick = null;
 
-  function stopAutoClose() {
-    autoOpened = false;
-    clearInterval(autoTick);
-    autoTick = null;
-    listEl?.querySelector('.factflag-list-timer')?.remove();
+  function hidePeek() {
+    clearInterval(peekTick);
+    peekTick = null;
+    peekEl?.remove();
+    peekEl = null;
+    peekId = null;
   }
 
-  function startAutoClose() {
-    clearInterval(autoTick);
-    autoOpened = true;
-    autoRemaining = AUTO_CLOSE_MS;
+  function showPeek(claim) {
+    const p = player();
+    if (!p || peekId === claim.id) return;
+    hidePeek();
+    peekId = claim.id;
+    peekEl = document.createElement('div');
+    peekEl.className = 'factflag-list factflag-peek';
+    stopPlayerEvents(peekEl);
+    const row = buildRow(claim);
+    row.classList.add(claim.verdict === 'FALSE' ? 'factflag-list-alert' : 'factflag-list-new');
+    const close = document.createElement('button');
+    close.className = 'factflag-card-close';
+    close.setAttribute('aria-label', 'Close');
+    close.textContent = '✕';
+    close.addEventListener('click', hidePeek);
+    row.querySelector('.factflag-list-top').appendChild(close);
+    const body = document.createElement('div');
+    body.className = 'factflag-list-body';
+    body.appendChild(row);
+    const timer = document.createElement('div');
+    timer.className = 'factflag-list-timer';
+    peekEl.append(body, timer);
+    // Pause only while the pointer is actually moved onto the pop-up — a
+    // cursor that was already resting where it appeared doesn't count.
+    let hovering = false;
+    peekEl.addEventListener('mousemove', () => { hovering = true; });
+    peekEl.addEventListener('mouseleave', () => { hovering = false; });
+    let remaining = PEEK_MS;
     let last = performance.now();
-    autoTick = setInterval(() => {
+    peekTick = setInterval(() => {
       const now = performance.now();
-      if (!listEl?.matches(':hover')) autoRemaining -= now - last;
+      if (!hovering) remaining -= now - last;
       last = now;
-      const timer = listEl?.querySelector('.factflag-list-timer');
-      if (timer) timer.style.width = `${Math.max(0, (autoRemaining / AUTO_CLOSE_MS) * 100)}%`;
-      if (autoRemaining <= 0) {
-        stopAutoClose();
-        listOpen = false;
-        renderStatus();
-        renderList();
-      }
+      timer.style.width = `${Math.max(0, (remaining / PEEK_MS) * 100)}%`;
+      if (remaining <= 0 || !p.contains(peekEl)) hidePeek();
     }, 100);
+    p.appendChild(peekEl);
   }
 
-  // Show a claim in the list, scrolled to and highlighted. auto = opened by
-  // an alert (closes itself) rather than by the viewer (stays open).
-  function showInList(claim, auto) {
+  // Show a claim in the full list, scrolled to and highlighted (a triangle
+  // was clicked).
+  function showInList(claim) {
+    hidePeek();
     revealed.add(claim.id);
     flashId = claim.id;
     if (!allClaims.some((c) => c.id === claim.id)) allClaims = [...allClaims, claim];
-    if (auto) {
-      // Closes itself after 10 s, unless the viewer opened it.
-      if (!listOpen || autoOpened) startAutoClose();
-    } else {
-      stopAutoClose();
-    }
     if (!listOpen) shownKey = '';
     listOpen = true;
     renderStatus();
     renderList();
   }
 
+  // A FALSE claim was just said: pop it up (or flash it in the open list).
   function alertClaim(claim) {
-    if (glowMode) glowFor([claim]);
-    else showInList(claim, true);
+    if (glowMode) return glowFor([claim]);
+    if (listOpen) {
+      flashId = claim.id;
+      renderList();
+      return;
+    }
+    showPeek(claim);
   }
 
   // ---- Glow mode ----
@@ -503,7 +515,7 @@ self.FactFlagOverlay = (() => {
   }
 
   function clearAlerts() {
-    stopAutoClose();
+    hidePeek();
     revealed.clear();
     readyIds = new Set();
     flashId = null;

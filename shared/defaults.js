@@ -10,8 +10,8 @@ self.FACTFLAG_DEFAULTS = {
   // Claims list fills in live (each claim appears right after it's said);
   // off = show every claim found so far, including ones ahead.
   liveList: true,
-  // Open the claims list for 10 s whenever a claim has been said (and has its
-  // result). Off = only for FALSE claims.
+  // Pop up each claim (one row, 10 s) right after it's said, once it has its
+  // result. Off = only FALSE claims pop up.
   autoOpenList: true,
   // Glow mode: instead of opening the list, a soft glow around the video's
   // edge fades in and out in the verdict's colour. No words until you open
