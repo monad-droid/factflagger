@@ -160,6 +160,7 @@ Rules:
 - Read the evidence literally. A source contradicts the claim only if what it says cannot be true at the same time as the claim. A source that is compatible with the claim, or even supports it, is NOT a contradiction.
 - Judge what the speaker evidently means, allowing ordinary conversational exaggeration and rounding: "decades" for 17 years, "everyone" for most people, "basically all" for nearly all. FALSE is only for claims whose core fact is wrong — not for loose wording around a correct fact (at most MISLEADING).
 - Statements about what someone talks about, cares about, or prioritizes ("he doesn't talk about inflation anymore") are characterizations: one counter-example does not make them FALSE. Use UNVERIFIABLE.
+- Claims about how common something is ("people don't say the pledge in school anymore", "nobody reads books now", "everyone has a smartphone") are generalizations. A single example — one school, one person, one event, one document — can never make them FALSE. FALSE requires evidence about how widespread it actually is: surveys, statistics, or laws/policies covering many cases. Without such evidence, use MISLEADING or UNVERIFIABLE.
 - A law, guideline, or ban saying something must not happen does not show that it isn't happening or being attempted.
 - A source saying something hasn't been achieved yet does not contradict a claim that people are working toward it.
 - Contested political or social claims (causes of unrest, immigration, crime, elections) need especially clear, specific contradicting facts for FALSE. One outlet's characterization or opinion is not enough.
@@ -191,6 +192,7 @@ Answer one question: read literally, does the QUOTE directly contradict the CLAI
 Also answer "unclear" (not "yes") when:
 - the quote only contradicts a literal or exaggerated reading of casual speech ("decades" for 17 years, "doesn't talk about X anymore" disproved by one mention), while the speaker's evident point still stands;
 - the quote is a rule, guideline, or ban saying something shouldn't happen — that doesn't show it isn't happening or being attempted;
+- the claim is a generalization about how common something is ("people don't do X anymore") and the quote describes only a single example (one school, one person, one event) rather than how widespread it is;
 - the quote says something hasn't been achieved, but the claim is that people are working toward it.
 
 Use only the claim and the quote. Do not use outside knowledge. If you are not sure, answer "unclear".
