@@ -17,6 +17,11 @@ self.FACTFLAG_DEFAULTS = {
   // edge fades in and out in the verdict's colour. No words until you open
   // the list yourself.
   glowMode: false,
+  // Which verdicts glow in glow mode (fewer = less distraction).
+  glowFalse: true,
+  glowMisleading: true,
+  glowTrue: false,          // includes "likely true" claims that weren't searched
+  glowUnverifiable: false,
   groqApiKey: '',
   tavilyApiKey: '',
   // Fast model: finds checkable claims in transcript chunks.

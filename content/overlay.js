@@ -57,14 +57,21 @@ self.FactFlagOverlay = (() => {
   let liveList = self.FACTFLAG_DEFAULTS.liveList;
   let autoOpenList = self.FACTFLAG_DEFAULTS.autoOpenList;
   let glowMode = self.FACTFLAG_DEFAULTS.glowMode;
-  chrome.storage.local.get(['liveList', 'autoOpenList', 'glowMode']).then((s) => {
+  // Which verdicts glow, e.g. { false: true, true: false, ... }.
+  const GLOW_KEYS = { false: 'glowFalse', misleading: 'glowMisleading', true: 'glowTrue', unverifiable: 'glowUnverifiable' };
+  const glowOn = {};
+  for (const [kind, key] of Object.entries(GLOW_KEYS)) glowOn[kind] = self.FACTFLAG_DEFAULTS[key];
+  chrome.storage.local.get(['liveList', 'autoOpenList', 'glowMode', ...Object.values(GLOW_KEYS)]).then((s) => {
     if (typeof s.liveList === 'boolean') liveList = s.liveList;
     if (typeof s.autoOpenList === 'boolean') autoOpenList = s.autoOpenList;
     if (typeof s.glowMode === 'boolean') glowMode = s.glowMode;
+    for (const [kind, key] of Object.entries(GLOW_KEYS)) if (typeof s[key] === 'boolean') glowOn[kind] = s[key];
     if (listOpen) renderList();
   });
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local' || (!changes.liveList && !changes.autoOpenList && !changes.glowMode)) return;
+    if (area !== 'local') return;
+    for (const [kind, key] of Object.entries(GLOW_KEYS)) if (changes[key]) glowOn[kind] = !!changes[key].newValue;
+    if (!changes.liveList && !changes.autoOpenList && !changes.glowMode) return;
     if (changes.liveList) liveList = !!changes.liveList.newValue;
     if (changes.glowMode) glowMode = !!changes.glowMode.newValue;
     if (changes.autoOpenList) {
@@ -476,10 +483,12 @@ self.FactFlagOverlay = (() => {
   // Most serious verdict first, so a FALSE claim said together with a TRUE
   // one glows red.
   const GLOW_ORDER = ['FALSE', 'MISLEADING', 'UNVERIFIABLE', 'TRUE'];
+  // The glow colour for a claim, or null if that verdict is set not to glow.
   function glowKind(c) {
-    if (c.status === 'skipped') return 'true';
-    if (c.status !== 'done') return null;
-    return GLOW_ORDER.includes(c.verdict) ? c.verdict.toLowerCase() : 'unverifiable';
+    let kind = null;
+    if (c.status === 'skipped') kind = 'true';
+    else if (c.status === 'done') kind = GLOW_ORDER.includes(c.verdict) ? c.verdict.toLowerCase() : 'unverifiable';
+    return kind && glowOn[kind] ? kind : null;
   }
   let glowEl = null;
   const glowedAt = new Map(); // claim id -> when it last glowed

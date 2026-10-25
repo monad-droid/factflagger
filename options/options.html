@@ -26,8 +26,15 @@
       <input type="checkbox" id="autoOpenList"> Pop up each claim for 10 seconds right after it's said (off = only FALSE claims). The full list opens only when you click the status line.
     </label>
     <label class="toggle">
-      <input type="checkbox" id="glowMode"> Glow mode: instead of opening the list, the edge of the video glows in the verdict's colour (red false, orange misleading, green true, blue can't tell). No words unless you open the list.
+      <input type="checkbox" id="glowMode"> Glow mode: instead of a pop-up, the edge of the video softly glows in the verdict's colour. No words unless you open the list.
     </label>
+    <div id="glowKinds" class="sub">
+      <span class="note">Glow for:</span>
+      <label class="toggle"><input type="checkbox" id="glowFalse"> <span class="swatch" style="background:#ff453a"></span> False</label>
+      <label class="toggle"><input type="checkbox" id="glowMisleading"> <span class="swatch" style="background:#ff9f0a"></span> Misleading</label>
+      <label class="toggle"><input type="checkbox" id="glowTrue"> <span class="swatch" style="background:#30d158"></span> True (and likely true)</label>
+      <label class="toggle"><input type="checkbox" id="glowUnverifiable"> <span class="swatch" style="background:#64d2ff"></span> Can't tell</label>
+    </div>
 
     <label for="provider">Check videos using</label>
     <select id="provider">

@@ -7,6 +7,8 @@ function setStatus(text, kind) {
   $('status').className = kind || '';
 }
 
+const GLOW_FIELDS = ['glowFalse', 'glowMisleading', 'glowTrue', 'glowUnverifiable'];
+
 async function load() {
   const s = { ...D, ...(await chrome.storage.local.get(Object.keys(D))) };
   for (const f of FIELDS) $(f).value = s[f] || '';
@@ -15,12 +17,15 @@ async function load() {
   $('liveList').checked = !!s.liveList;
   $('autoOpenList').checked = !!s.autoOpenList;
   $('glowMode').checked = !!s.glowMode;
+  for (const k of GLOW_FIELDS) $(k).checked = !!s[k];
+  $('glowKinds').hidden = !s.glowMode;
   $('provider').value = s.provider || 'chatgpt';
   updateProviderNote();
 }
 
 async function save() {
   const values = { enabled: $('enabled').checked, soundEnabled: $('soundEnabled').checked, liveList: $('liveList').checked, autoOpenList: $('autoOpenList').checked, glowMode: $('glowMode').checked, provider: $('provider').value };
+  for (const k of GLOW_FIELDS) values[k] = $(k).checked;
   for (const f of FIELDS) values[f] = $(f).value.trim();
   if (!values.detectionModel) values.detectionModel = D.detectionModel;
   if (!values.verdictModel) values.verdictModel = D.verdictModel;
@@ -273,6 +278,7 @@ $('soundEnabled').addEventListener('change', save);
 $('liveList').addEventListener('change', save);
 $('autoOpenList').addEventListener('change', save);
 $('glowMode').addEventListener('change', save);
+for (const k of GLOW_FIELDS) $(k).addEventListener('change', save);
 $('provider').addEventListener('change', () => { updateProviderNote(); save(); });
 
 function updateProviderNote() {
