@@ -495,6 +495,7 @@
     // Only FALSE claims are shown on the video.
     falseClaims = msg.state.claims.filter((c) => c.verdict === 'FALSE');
     Overlay.setClaims(falseClaims);
+    Overlay.setAllClaims(msg.state.claims);
     logNewVerdicts(msg.state);
     // A verdict that arrives a few seconds after the claim was said still alerts
     // (only verdicts that just arrived — not old ones, e.g. after skipping ahead).

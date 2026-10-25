@@ -26,9 +26,109 @@ self.FactFlagOverlay = (() => {
     if (!statusEl || !p.contains(statusEl)) {
       statusEl = document.createElement('div');
       statusEl.className = 'factflag-status';
+      statusEl.title = 'Click to see every claim FactFlag has checked';
+      stopPlayerEvents(statusEl);
+      statusEl.addEventListener('click', toggleList);
       p.appendChild(statusEl);
     }
-    statusEl.textContent = statusText ? `FactFlag · ${statusText}` : '';
+    statusEl.textContent = statusText ? `FactFlag · ${statusText} ${listOpen ? '▴' : '▾'}` : '';
+    statusEl.classList.toggle('open', listOpen);
+  }
+
+  // Keep clicks on our panels from reaching the player (which would pause/play).
+  function stopPlayerEvents(el) {
+    for (const ev of ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup', 'dblclick']) {
+      el.addEventListener(ev, (e) => e.stopPropagation());
+    }
+  }
+
+  // ---- List of every checked claim (opened by clicking the status line) ----
+  let allClaims = [];
+  let listOpen = false;
+  let listEl = null;
+
+  const VERDICT_LABELS = {
+    FALSE: 'FALSE', MISLEADING: 'MISLEADING', TRUE: 'TRUE', UNVERIFIABLE: 'UNVERIFIABLE'
+  };
+
+  function claimLabel(c) {
+    if (c.status === 'skipped') return { text: 'LIKELY TRUE · not searched', cls: 'skipped' };
+    if (c.status === 'pending' || c.status === 'checking') return { text: 'CHECKING…', cls: 'pending' };
+    if (c.status === 'error') return { text: 'ERROR', cls: 'error' };
+    const v = VERDICT_LABELS[c.verdict] || 'UNVERIFIABLE';
+    return { text: v, cls: v.toLowerCase() };
+  }
+
+  function toggleList() {
+    listOpen = !listOpen;
+    renderStatus();
+    renderList();
+  }
+
+  function renderList() {
+    const p = player();
+    if (!listOpen || !p) {
+      listEl?.remove();
+      listEl = null;
+      return;
+    }
+    const keepScroll = listEl?.querySelector('.factflag-list-body')?.scrollTop || 0;
+    listEl?.remove();
+    listEl = document.createElement('div');
+    listEl.className = 'factflag-list';
+    stopPlayerEvents(listEl);
+    listEl.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true });
+
+    const head = document.createElement('div');
+    head.className = 'factflag-list-head';
+    head.append(line('factflag-list-title', `Claims checked so far (${allClaims.length})`));
+    const close = document.createElement('button');
+    close.className = 'factflag-card-close';
+    close.setAttribute('aria-label', 'Close');
+    close.textContent = '✕';
+    close.addEventListener('click', toggleList);
+    head.appendChild(close);
+    listEl.appendChild(head);
+
+    const body = document.createElement('div');
+    body.className = 'factflag-list-body';
+    if (!allClaims.length) {
+      body.appendChild(line('factflag-list-empty', 'No checkable claims yet. FactFlag checks about a minute ahead of where you are.'));
+    }
+    for (const c of [...allClaims].sort((a, b) => a.t - b.t)) {
+      const row = document.createElement('div');
+      row.className = 'factflag-list-row';
+      const top = document.createElement('div');
+      top.className = 'factflag-list-top';
+      const time = document.createElement('button');
+      time.className = 'factflag-list-time';
+      time.textContent = fmtTime(c.t);
+      time.title = 'Jump to this moment';
+      time.addEventListener('click', () => { const v = video(); if (v) v.currentTime = c.t; });
+      const label = claimLabel(c);
+      const chip = line(`factflag-chip factflag-chip-${label.cls}`, label.text);
+      top.append(time, chip);
+      row.appendChild(top);
+      row.appendChild(line('factflag-list-claim', c.claim));
+      const why = c.status === 'skipped' ? (c.triageReason ? `Screened as likely true: ${c.triageReason}` : '')
+        : c.status === 'error' ? c.error : c.explanation;
+      if (why) row.appendChild(line('factflag-list-why', why));
+      if (c.sourceUrl) {
+        const src = document.createElement('div');
+        src.className = 'factflag-list-why';
+        const a = document.createElement('a');
+        a.href = c.sourceUrl;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        try { a.textContent = new URL(c.sourceUrl).hostname.replace(/^www\./, ''); } catch (_) { a.textContent = 'source'; }
+        src.append('Source: ', a);
+        row.appendChild(src);
+      }
+      body.appendChild(row);
+    }
+    listEl.appendChild(body);
+    p.appendChild(listEl);
+    body.scrollTop = keepScroll;
   }
 
   function hideTip() {
@@ -125,6 +225,7 @@ self.FactFlagOverlay = (() => {
   // YouTube sometimes rebuilds the player; re-attach if our elements disappear.
   setInterval(() => {
     if (statusText) renderStatus();
+    if (listOpen && listEl && !player()?.contains(listEl)) renderList();
     if (claims.length) renderMarkers();
   }, 1000);
 
@@ -287,6 +388,10 @@ self.FactFlagOverlay = (() => {
       statusText = text || '';
       renderStatus();
     },
+    setAllClaims(list) {
+      allClaims = list || [];
+      if (listOpen) renderList();
+    },
     setClaims(list) {
       claims = list || [];
       if (!claims.length) {
@@ -299,6 +404,9 @@ self.FactFlagOverlay = (() => {
     },
     clear() {
       this.setClaims([]);
+      allClaims = [];
+      listOpen = false;
+      renderList();
       this.setStatus('');
       clearCards();
     }
