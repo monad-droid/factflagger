@@ -27,6 +27,8 @@ All prompts live in **`prompts.js`**. Edit it in any text editor, then reload th
 
 ## Settings
 
+**Ask to change a setting** (top of the settings page): type what you want in your own words, e.g. "only glow for false claims and make it brighter". One small request to the claim-finding model (Luna on the ChatGPT plan) turns it into setting changes, which are applied and listed with an **Undo** button. It can only change the display settings listed in `shared/defaults.js` (`FACTFLAG_SETTINGS_INFO`) — never keys, models or sign-in — and every value is checked before it's saved. Its instructions are `settingsAssistantSystem` in `prompts.js`.
+
 **Check videos using:**
 - **My ChatGPT plan** (default) — click *Continue with ChatGPT* and allow plan use. Every step runs on your ChatGPT Plus/Pro plan, including web search; no API keys needed. Usage counts against your plan's limits (on Plus, a five-hour limit shared with your other plan use); when a limit is hit FactFlag pauses — it never switches to paid billing. Keep "use credits after plan limits" off for FactFlag at chatgpt.com/settings/usage. Two model choices: a **claim-finding & web-search model** (defaults to a Luna model, the cheapest tier) finds claims and runs each web search, copying out the relevant passages word for word; the **verdict model** (screening, judging those passages, second check) never reads whole pages. Turn this off with `chatgptSearchWithFastModel: false` in `prompts.js`; `chatgptMaxSearchesPerVerdict` and `chatgptSearchContextSize` there can cut usage further if needed. The *Free budget* section shows which step used how much today.
 - **Groq + Tavily API keys** — the original setup, using the keys below.

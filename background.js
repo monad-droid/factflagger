@@ -18,6 +18,68 @@ async function getSettings() {
   return { ...self.FACTFLAG_DEFAULTS, ...stored };
 }
 
+// Settings page "Ask to change a setting": the claim-finding (cheap) model
+// turns a plain-words request into setting changes. Only settings listed in
+// FACTFLAG_SETTINGS_INFO can change, and every value is checked here.
+async function changeSettingsFromText(request) {
+  const P = self.FACTFLAG_PROMPTS;
+  const INFO = self.FACTFLAG_SETTINGS_INFO;
+  const settings = await getSettings();
+  const list = Object.entries(INFO).map(([key, i]) => {
+    const type = i.type === 'enum' ? `one of ${i.values.join(' / ')}` : i.type === 'number' ? `number ${i.min}-${i.max}` : 'on/off';
+    return `- ${key} (${type}, now ${JSON.stringify(settings[key])}): ${i.label}. ${i.about}`;
+  }).join('\n');
+  const { json } = await aiJson(settings, 'fast', {
+    system: fill(P.settingsAssistantSystem, { SETTINGS: list }),
+    user: fill(P.settingsAssistantUser, { REQUEST: String(request).slice(0, 1000) }),
+    schemaName: 'settings_change',
+    schema: {
+      type: 'object',
+      properties: {
+        changes: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { key: { type: 'string', enum: Object.keys(INFO) }, value: { type: 'string' } },
+            required: ['key', 'value'],
+            additionalProperties: false
+          }
+        },
+        reply: { type: 'string' }
+      },
+      required: ['changes', 'reply'],
+      additionalProperties: false
+    },
+    reasoningEffort: 'low'
+  });
+  const apply = {};
+  const changes = [];
+  const skipped = [];
+  for (const { key, value } of json.changes || []) {
+    const info = INFO[key];
+    if (!info) { skipped.push(key); continue; }
+    const v = String(value).trim().toLowerCase();
+    let next;
+    if (info.type === 'boolean') {
+      if (['true', 'on', 'yes', '1'].includes(v)) next = true;
+      else if (['false', 'off', 'no', '0'].includes(v)) next = false;
+    } else if (info.type === 'number') {
+      const n = Number(v.replace(/%$/, ''));
+      if (Number.isFinite(n)) next = Math.min(info.max, Math.max(info.min, Math.round(n)));
+    } else if (info.type === 'enum' && info.values.includes(v)) {
+      next = v;
+    }
+    if (next === undefined) { skipped.push(key); continue; }
+    if (next === settings[key]) continue;
+    apply[key] = next;
+    changes.push({ key, label: info.label, from: settings[key], to: next });
+  }
+  if (changes.length) await chrome.storage.local.set(apply);
+  // The values before the change, so the settings page can undo it.
+  const undo = Object.fromEntries(changes.map((c) => [c.key, c.from]));
+  return { reply: String(json.reply || '').trim(), changes, skipped, undo };
+}
+
 // Settings page "Test Groq" button: checks the key works and both model IDs exist.
 async function testGroq() {
   const s = await getSettings();
@@ -978,7 +1040,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     CHATGPT_SIGN_OUT: () => chatgptSignOut(),
     CHATGPT_MODELS: () => chatgptModels(),
     CHATGPT_SET_MODEL: () => chatgptSetModel(msg.model, msg.which),
-    CHATGPT_TEST: () => chatgptTest()
+    CHATGPT_TEST: () => chatgptTest(),
+    CHANGE_SETTINGS: () => changeSettingsFromText(msg.request)
   };
   if (chatgptActions[msg?.type]) {
     chatgptActions[msg.type]()

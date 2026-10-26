@@ -306,3 +306,46 @@ function updateProviderNote() {
 }
 $('testSound').addEventListener('click', () => self.factflagDing());
 load();
+
+// ---- Ask to change a setting ----
+async function askToChange() {
+  const text = $('askText').value.trim();
+  if (!text) return;
+  const out = $('askResult');
+  out.hidden = false;
+  out.textContent = 'Working on it…';
+  $('askGo').disabled = true;
+  try {
+    const r = await chrome.runtime.sendMessage({ type: 'CHANGE_SETTINGS', request: text });
+    out.textContent = '';
+    if (!r?.ok) { out.textContent = `Couldn't do that: ${r?.error || 'no answer'}`; return; }
+    const { reply, changes, undo, skipped } = r.result;
+    if (reply) out.appendChild(Object.assign(document.createElement('p'), { textContent: reply }));
+    if (skipped.length) {
+      out.appendChild(Object.assign(document.createElement('p'), { textContent: `Not changed (the AI gave a value that isn't allowed): ${skipped.join(', ')}` }));
+    }
+    if (changes.length) {
+      const show = (v) => (v === true ? 'on' : v === false ? 'off' : String(v));
+      const ul = document.createElement('ul');
+      for (const c of changes) {
+        ul.appendChild(Object.assign(document.createElement('li'), { textContent: `${c.label}: ${show(c.from)} → ${show(c.to)}` }));
+      }
+      out.appendChild(ul);
+      const undoBtn = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Undo' });
+      undoBtn.addEventListener('click', async () => {
+        await chrome.storage.local.set(undo);
+        await load();
+        out.textContent = 'Undone.';
+      });
+      out.appendChild(undoBtn);
+      $('askText').value = '';
+      await load();
+    } else if (!reply) {
+      out.textContent = 'Nothing needed changing.';
+    }
+  } finally {
+    $('askGo').disabled = false;
+  }
+}
+$('askGo').addEventListener('click', askToChange);
+$('askText').addEventListener('keydown', (e) => { if (e.key === 'Enter') askToChange(); });

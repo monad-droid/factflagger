@@ -10,7 +10,17 @@
 <body>
   <main>
     <h1>FactFlag settings</h1>
-    <p class="note">Keys are stored only in this browser (chrome.storage.local) and are sent only to Groq and Tavily.</p>
+    <p class="note">Keys are stored only in this browser (chrome.storage.local) and are sent only to the service they belong to.</p>
+
+    <section class="ask">
+      <label for="askText">Ask to change a setting</label>
+      <p class="note">Say what you want in your own words, e.g. "only glow for false claims and make it brighter" or "alert me when they start saying it". Uses your ChatGPT plan (or Groq), one small request.</p>
+      <div class="row">
+        <input type="text" id="askText" placeholder="e.g. turn off the sound" maxlength="1000">
+        <button type="button" id="askGo">Change it</button>
+      </div>
+      <div id="askResult" class="note" hidden></div>
+    </section>
 
     <label class="toggle">
       <input type="checkbox" id="enabled"> FactFlag is on

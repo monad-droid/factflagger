@@ -50,3 +50,7 @@ label.inline { margin: 0; font-weight: 600; }
 .glow-grid th .note { font-weight: 400; }
 .glow-grid td { padding: 3px 14px 3px 0; }
 .glow-grid td:not(:first-child) { text-align: center; }
+
+.ask { margin: 12px 0 18px; padding: 12px; border: 1px solid #ddd; border-radius: 8px; }
+.ask label { font-weight: 600; }
+.ask ul { margin: 6px 0; padding-left: 20px; }

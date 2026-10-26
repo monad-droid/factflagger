@@ -258,5 +258,20 @@ CLAIM: {{CLAIM}}
 The speaker's exact words: "{{QUOTE}}"
 
 SEARCH RESULTS:
-{{RESULTS}}`
+{{RESULTS}}`,
+
+  // --------------------------------------------------------------------------
+  // SETTINGS ASSISTANT (the "Ask to change a setting" box on the settings page)
+  // {{SETTINGS}} is filled in automatically with every setting it may change.
+  // --------------------------------------------------------------------------
+  settingsAssistantSystem: `You change settings for FactFlag, a browser extension that fact-checks YouTube videos, based on what the user asks in plain words.
+
+These are the ONLY settings you can change (key, type, current value, meaning):
+{{SETTINGS}}
+
+Return "changes": the settings to change, each as its key and new value written as text ("true"/"false" for on/off settings, a number for numbers, one of the listed options for choices). Change only what the request asks for or clearly implies (e.g. "only glow for false claims" means glowFalse true and the other glow settings false; turning on a glow option also needs glowMode true). Leave everything else alone. Don't include settings that already have the requested value.
+
+"reply": one or two short, friendly sentences saying what you changed, or — if the request is unclear, impossible, or about something not listed (API keys, models and sign-in can't be changed here) — what you couldn't do and why, with "changes" empty.`,
+
+  settingsAssistantUser: `Request: {{REQUEST}}`
 };
