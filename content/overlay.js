@@ -61,9 +61,14 @@ self.FactFlagOverlay = (() => {
   let glowStrength = self.FACTFLAG_DEFAULTS.glowStrength;
   // Which verdicts glow, e.g. { false: true, true: false, ... }.
   const GLOW_KEYS = { false: 'glowFalse', misleading: 'glowMisleading', true: 'glowTrue', unverifiable: 'glowUnverifiable' };
+  // Which verdicts still pop up (with words) in glow mode.
+  const POP_KEYS = { false: 'glowPopFalse', misleading: 'glowPopMisleading', true: 'glowPopTrue', unverifiable: 'glowPopUnverifiable' };
   const glowOn = {};
+  const popOn = {};
   for (const [kind, key] of Object.entries(GLOW_KEYS)) glowOn[kind] = self.FACTFLAG_DEFAULTS[key];
-  chrome.storage.local.get(['liveList', 'autoOpenList', 'glowMode', 'alertTiming', 'glowStrength', ...Object.values(GLOW_KEYS)]).then((s) => {
+  for (const [kind, key] of Object.entries(POP_KEYS)) popOn[kind] = self.FACTFLAG_DEFAULTS[key];
+  chrome.storage.local.get(['liveList', 'autoOpenList', 'glowMode', 'alertTiming', 'glowStrength', ...Object.values(GLOW_KEYS), ...Object.values(POP_KEYS)]).then((s) => {
+    for (const [kind, key] of Object.entries(POP_KEYS)) if (typeof s[key] === 'boolean') popOn[kind] = s[key];
     if (s.alertTiming === 'start' || s.alertTiming === 'end') alertTiming = s.alertTiming;
     if (Number.isFinite(s.glowStrength)) glowStrength = s.glowStrength;
     if (typeof s.liveList === 'boolean') liveList = s.liveList;
@@ -75,6 +80,7 @@ self.FactFlagOverlay = (() => {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     for (const [kind, key] of Object.entries(GLOW_KEYS)) if (changes[key]) glowOn[kind] = !!changes[key].newValue;
+    for (const [kind, key] of Object.entries(POP_KEYS)) if (changes[key]) popOn[kind] = !!changes[key].newValue;
     if (changes.glowStrength && Number.isFinite(changes.glowStrength.newValue)) glowStrength = changes.glowStrength.newValue;
     if (changes.alertTiming) alertTiming = changes.alertTiming.newValue === 'start' ? 'start' : 'end';
     if (!changes.liveList && !changes.autoOpenList && !changes.glowMode) return;
@@ -257,11 +263,14 @@ self.FactFlagOverlay = (() => {
     if (!fresh.length) return false;
     if (glowMode) {
       glowFor(fresh);
+      // Verdicts set to also pop up do, unless the full list is open.
+      const pop = fresh.filter((c) => popOn[verdictKind(c)]);
+      if (pop.length && !listOpen) showPeek(pickPeek(pop));
       return false;
     }
     // The full list is open: its new rows already show up live.
     if (listOpen || !autoOpenList) return false;
-    showPeek(fresh.find((c) => c.verdict === 'FALSE') || fresh.reduce((a, b) => (b.t > a.t ? b : a)));
+    showPeek(pickPeek(fresh));
     return true;
   }
 
@@ -427,6 +436,11 @@ self.FactFlagOverlay = (() => {
     peekId = null;
   }
 
+  // Of several claims said at once, pop up a FALSE one, else the latest.
+  function pickPeek(list) {
+    return list.find((c) => c.verdict === 'FALSE') || list.reduce((a, b) => (b.t > a.t ? b : a));
+  }
+
   function showPeek(claim) {
     const p = player();
     if (!p || peekId === claim.id) return;
@@ -481,7 +495,10 @@ self.FactFlagOverlay = (() => {
 
   // A FALSE claim was just said: pop it up (or flash it in the open list).
   function alertClaim(claim) {
-    if (glowMode) return glowFor([claim]);
+    if (glowMode) {
+      glowFor([claim]);
+      if (!popOn.false) return;
+    }
     if (listOpen) {
       flashId = claim.id;
       renderList();
@@ -495,11 +512,15 @@ self.FactFlagOverlay = (() => {
   // Most serious verdict first, so a FALSE claim said together with a TRUE
   // one glows red.
   const GLOW_ORDER = ['FALSE', 'MISLEADING', 'UNVERIFIABLE', 'TRUE'];
+  // false / misleading / true / unverifiable ("likely true" counts as true).
+  function verdictKind(c) {
+    if (c.status === 'skipped') return 'true';
+    if (c.status === 'done') return GLOW_ORDER.includes(c.verdict) ? c.verdict.toLowerCase() : 'unverifiable';
+    return null;
+  }
   // The glow colour for a claim, or null if that verdict is set not to glow.
   function glowKind(c) {
-    let kind = null;
-    if (c.status === 'skipped') kind = 'true';
-    else if (c.status === 'done') kind = GLOW_ORDER.includes(c.verdict) ? c.verdict.toLowerCase() : 'unverifiable';
+    const kind = verdictKind(c);
     return kind && glowOn[kind] ? kind : null;
   }
   let glowEl = null;

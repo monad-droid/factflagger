@@ -44,3 +44,9 @@ label.inline { margin: 0; font-weight: 600; }
 .glow-strength input[type=range] { flex: 0 1 200px; }
 .glow-preview { position: relative; width: 120px; height: 68px; border-radius: 6px; overflow: hidden;
   background: linear-gradient(135deg, #3a4a5a, #1d2630); }
+
+.glow-grid { border-collapse: collapse; font-size: 13px; }
+.glow-grid th { font-weight: 600; text-align: center; padding: 2px 14px; vertical-align: bottom; }
+.glow-grid th .note { font-weight: 400; }
+.glow-grid td { padding: 3px 14px 3px 0; }
+.glow-grid td:not(:first-child) { text-align: center; }

@@ -7,7 +7,8 @@ function setStatus(text, kind) {
   $('status').className = kind || '';
 }
 
-const GLOW_FIELDS = ['glowFalse', 'glowMisleading', 'glowTrue', 'glowUnverifiable'];
+const GLOW_FIELDS = ['glowFalse', 'glowMisleading', 'glowTrue', 'glowUnverifiable',
+  'glowPopFalse', 'glowPopMisleading', 'glowPopTrue', 'glowPopUnverifiable'];
 
 async function load() {
   const s = { ...D, ...(await chrome.storage.local.get(Object.keys(D))) };

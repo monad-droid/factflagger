@@ -25,6 +25,11 @@ self.FACTFLAG_DEFAULTS = {
   glowMisleading: true,
   glowTrue: false,          // includes "likely true" claims that weren't searched
   glowUnverifiable: false,
+  // In glow mode, which verdicts still pop up (with the words) as well as glowing.
+  glowPopFalse: true,
+  glowPopMisleading: false,
+  glowPopTrue: false,
+  glowPopUnverifiable: false,
   // How strong the glow is, 5–100.
   glowStrength: 40,
   groqApiKey: '',

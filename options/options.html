@@ -38,11 +38,21 @@
       <input type="checkbox" id="glowMode"> Glow mode: instead of a pop-up, the edge of the video softly glows in the verdict's colour. No words unless you open the list.
     </label>
     <div id="glowKinds" class="sub">
-      <span class="note">Glow for:</span>
-      <label class="toggle"><input type="checkbox" id="glowFalse"> <span class="swatch" style="background:#ff453a"></span> False</label>
-      <label class="toggle"><input type="checkbox" id="glowMisleading"> <span class="swatch" style="background:#ff9f0a"></span> Misleading</label>
-      <label class="toggle"><input type="checkbox" id="glowTrue"> <span class="swatch" style="background:#30d158"></span> True (and likely true)</label>
-      <label class="toggle"><input type="checkbox" id="glowUnverifiable"> <span class="swatch" style="background:#bebebe"></span> Can't tell</label>
+      <table class="glow-grid">
+        <tr><th></th><th>Glow</th><th>Also pop up<br><span class="note">with the words</span></th></tr>
+        <tr><td><span class="swatch" style="background:#ff453a"></span> False</td>
+          <td><input type="checkbox" id="glowFalse" aria-label="Glow for false"></td>
+          <td><input type="checkbox" id="glowPopFalse" aria-label="Pop up false"></td></tr>
+        <tr><td><span class="swatch" style="background:#ff9f0a"></span> Misleading</td>
+          <td><input type="checkbox" id="glowMisleading" aria-label="Glow for misleading"></td>
+          <td><input type="checkbox" id="glowPopMisleading" aria-label="Pop up misleading"></td></tr>
+        <tr><td><span class="swatch" style="background:#30d158"></span> True (and likely true)</td>
+          <td><input type="checkbox" id="glowTrue" aria-label="Glow for true"></td>
+          <td><input type="checkbox" id="glowPopTrue" aria-label="Pop up true"></td></tr>
+        <tr><td><span class="swatch" style="background:#bebebe"></span> Can't tell</td>
+          <td><input type="checkbox" id="glowUnverifiable" aria-label="Glow for can't tell"></td>
+          <td><input type="checkbox" id="glowPopUnverifiable" aria-label="Pop up can't tell"></td></tr>
+      </table>
       <div class="glow-strength">
         <label for="glowStrength" class="inline">Glow strength</label>
         <input type="range" id="glowStrength" min="5" max="100" step="5">
