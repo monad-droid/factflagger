@@ -102,7 +102,7 @@ self.FactFlagOverlay = (() => {
   // Only claims with a result are listed — never ones still queued or being checked.
   const ready = (c) => c.status === 'done' || c.status === 'skipped' || c.status === 'error';
   const heard = (c) => ready(c) && (!liveList || revealed.has(c.id) || said(c));
-  let readyIds = new Set(); // claims said and ready at the last check, for auto-open
+  let lastT = null; // video time at the last check, for auto-open
   let listEl = null;
 
   const VERDICT_LABELS = {
@@ -250,16 +250,18 @@ self.FactFlagOverlay = (() => {
   function listKey() {
     return allClaims.filter(heard).map((c) => c.id).join(',') || 'none';
   }
-  // Auto-open: when a claim has just been said and has its result (or the
-  // result arrives a little after), open the list for 10 seconds. Claims
-  // skipped past by seeking don't count.
-  const AUTO_OPEN_LATE_SECONDS = 15;
+  // Pop-up / glow: only for claims whose result was ready at the moment
+  // normal playback passed them. A result that arrives after the claim was
+  // said (e.g. in the first minute of a video, before checking catches up)
+  // never alerts — it just appears in the list. Seeking and ads don't count.
   function checkAutoOpen() {
-    const t = video()?.currentTime || 0;
-    const now = new Set(allClaims.filter((c) => ready(c) && said(c)).map((c) => c.id));
-    const fresh = allClaims.filter((c) => now.has(c.id) && !readyIds.has(c.id) &&
-      t - alertMoment(c) < AUTO_OPEN_LATE_SECONDS);
-    readyIds = now;
+    const v = video();
+    const t = v?.currentTime || 0;
+    const prev = lastT;
+    if (player()?.classList.contains('ad-showing')) { lastT = null; return false; }
+    lastT = t;
+    if (prev === null || t < prev || t - prev > 3) return false;
+    const fresh = allClaims.filter((c) => ready(c) && alertMoment(c) > prev && alertMoment(c) <= t);
     if (!fresh.length) return false;
     if (glowMode) {
       glowFor(fresh);
@@ -546,7 +548,7 @@ self.FactFlagOverlay = (() => {
   function clearAlerts() {
     hidePeek();
     revealed.clear();
-    readyIds = new Set();
+    lastT = null;
     flashId = null;
   }
 
@@ -598,7 +600,7 @@ self.FactFlagOverlay = (() => {
     },
     setAllClaims(list) {
       allClaims = list || [];
-      if (!checkAutoOpen() && listOpen) renderList();
+      if (listOpen) renderList();
     },
     setClaims(list) {
       claims = list || [];

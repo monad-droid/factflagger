@@ -496,15 +496,14 @@
     if (soundOn && self.factflagDing()) console.info(LOG, `ding — FALSE claim at ${fmtTime(c.t)}`);
   }
 
-  // ---- Alert (claims list opens on it, plus the ding) when playback reaches a FALSE claim ----
-  const LATE_ALERT_SECONDS = 15; // verdict arrived just after the claim was said
+  // ---- Alert (pop-up or glow, plus the ding) when playback reaches a FALSE claim ----
+  // Only if the verdict was already in when the claim was said: a verdict
+  // that arrives later (e.g. in the first minute of a video) never alerts.
   // When the alert comes (start or end of the claim) is set in settings.
   const alertAt = (c) => Overlay.alertMoment(c);
   let falseClaims = [];
   const alerted = new Set();     // claim ids alerted during this viewing
-  const knownFalse = new Set();  // claim ids already known to be FALSE
   let lastTime = null;
-  let playedFrom = null;         // where the current stretch of normal playback began
 
   function playerVideo() {
     return document.querySelector('#movie_player video');
@@ -519,15 +518,14 @@
     const now = v.currentTime;
     const prev = lastTime;
     lastTime = now;
-    if (prev === null) { playedFrom = now; return; }
+    if (prev === null) return;
     // Seeking backwards: allow claims ahead of the new position to alert again.
     if (now < prev - 1) {
       for (const c of falseClaims) if (alertAt(c) > now) alerted.delete(c.id);
-      playedFrom = now;
       return;
     }
     // Only normal playback counts — skipping past a claim doesn't trigger it.
-    if (now - prev > 3) { playedFrom = now; return; }
+    if (now - prev > 3) return;
     for (const c of falseClaims) {
       if (!alerted.has(c.id) && alertAt(c) > prev && alertAt(c) <= now) {
         alerted.add(c.id);
@@ -557,21 +555,6 @@
     Overlay.setClaims(falseClaims);
     Overlay.setAllClaims(msg.state.claims);
     logNewVerdicts(msg.state);
-    // A verdict that arrives a few seconds after the claim was said still alerts
-    // (only verdicts that just arrived — not old ones, e.g. after skipping ahead).
-    const justArrived = falseClaims.filter((c) => !knownFalse.has(c.id));
-    for (const c of falseClaims) knownFalse.add(c.id);
-    const v = playerVideo();
-    if (v && !v.paused && !adPlaying()) {
-      for (const c of justArrived) {
-        const heard = playedFrom !== null && c.t >= playedFrom; // played through it since the last skip
-        if (heard && !alerted.has(c.id) && v.currentTime >= alertAt(c) &&
-            v.currentTime - alertAt(c) <= LATE_ALERT_SECONDS) {
-          alerted.add(c.id);
-          alertFalseClaim(c);
-        }
-      }
-    }
   });
 
   function onNavigate() {
@@ -581,8 +564,6 @@
     currentVideoId = videoId;
     falseClaims = [];
     alerted.clear();
-    knownFalse.clear();
-    playedFrom = null;
     lastTime = null;
     if (!videoId) { runToken++; Overlay.clear(); return; }
     handleVideo(videoId);
