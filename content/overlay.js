@@ -468,6 +468,7 @@ self.FactFlagOverlay = (() => {
     const timer = document.createElement('div');
     timer.className = 'factflag-list-timer';
     peekEl.append(body, timer);
+    // The countdown also holds while the video is paused (see the timer below).
     // Pause only while the pointer is actually moved onto the pop-up — a
     // cursor that was already resting where it appeared doesn't count.
     let hovering = false;
@@ -477,7 +478,9 @@ self.FactFlagOverlay = (() => {
     let last = performance.now();
     peekTick = setInterval(() => {
       const now = performance.now();
-      if (!hovering) remaining -= now - last;
+      // Paused video or mouse on the pop-up: hold the countdown, so there's
+      // time to read.
+      if (!hovering && !video()?.paused) remaining -= now - last;
       last = now;
       timer.style.width = `${Math.max(0, (remaining / PEEK_MS) * 100)}%`;
       if (remaining <= 0 || !p.contains(peekEl)) hidePeek();
