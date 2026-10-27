@@ -8,13 +8,39 @@ const LOG = '[FactFlag]';
 
 chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === 'install') chrome.runtime.openOptionsPage();
+  await migrateSettings();
+});
+
+// One-time changes to saved settings after an update.
+async function migrateSettings() {
   // 0.12.1 made "alert at the start of the claim" the default. The settings
   // page saved the old default ('end') for everyone, so switch it once.
   const { alertTimingStartMigrated } = await chrome.storage.local.get('alertTimingStartMigrated');
   if (!alertTimingStartMigrated) {
     await chrome.storage.local.set({ alertTiming: 'start', alertTimingStartMigrated: true });
   }
-});
+  // 0.13.0: "pop up every claim" and "glow mode" became one choice per verdict
+  // (pop up and/or glow). Carry over what was set before, once.
+  const old = await chrome.storage.local.get(['alertGridMigrated', 'autoOpenList', 'glowMode',
+    'glowPopFalse', 'glowPopMisleading', 'glowPopTrue', 'glowPopUnverifiable',
+    'glowFalse', 'glowMisleading', 'glowTrue', 'glowUnverifiable']);
+  if (!old.alertGridMigrated) {
+    const kinds = ['False', 'Misleading', 'True', 'Unverifiable'];
+    const next = { alertGridMigrated: true };
+    for (const k of kinds) {
+      if (old.glowMode) {
+        next[`pop${k}`] = old[`glowPop${k}`] ?? (k === 'False');
+        next[`glow${k}`] = old[`glow${k}`] ?? (k === 'False' || k === 'Misleading');
+      } else {
+        next[`pop${k}`] = old.autoOpenList === false ? k === 'False' : true;
+        next[`glow${k}`] = false;
+      }
+    }
+    await chrome.storage.local.set(next);
+    await chrome.storage.local.remove(['autoOpenList', 'glowMode', 'glowPopFalse', 'glowPopMisleading',
+      'glowPopTrue', 'glowPopUnverifiable']);
+  }
+}
 
 // Toolbar button opens settings.
 chrome.action.onClicked.addListener(() => chrome.runtime.openOptionsPage());

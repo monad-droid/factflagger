@@ -54,3 +54,5 @@ label.inline { margin: 0; font-weight: 600; }
 .ask { margin: 12px 0 18px; padding: 12px; border: 1px solid #ddd; border-radius: 8px; }
 .ask label { font-weight: 600; }
 .ask ul { margin: 6px 0; padding-left: 20px; }
+.label-like { font-weight: 600; margin: 14px 0 4px; }
+.glow-grid th { line-height: 1.2; }

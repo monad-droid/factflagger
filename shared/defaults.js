@@ -10,26 +10,21 @@ self.FACTFLAG_DEFAULTS = {
   // Claims list fills in live (each claim appears right after it's said);
   // off = show every claim found so far, including ones ahead.
   liveList: true,
-  // Pop up each claim (one row, 10 s) right after it's said, once it has its
-  // result. Off = only FALSE claims pop up.
-  autoOpenList: true,
-  // Glow mode: instead of opening the list, a soft glow around the video's
-  // edge fades in and out in the verdict's colour. No words until you open
-  // the list yourself.
-  glowMode: false,
   // When alerts (pop-up, glow, ding, live list row) come: 'start' = as the
   // speaker begins saying the claim; 'end' = right after they finish it.
   alertTiming: 'start',
-  // Which verdicts glow in glow mode (fewer = less distraction).
-  glowFalse: true,
-  glowMisleading: true,
-  glowTrue: false,          // includes "likely true" claims that weren't searched
+  // For each verdict, what happens right after the claim is said:
+  // pop up = the claim and its verdict show for 10 s (one row);
+  // glow = the edge of the video softly glows in the verdict's colour.
+  // "True" includes "likely true" claims that weren't searched.
+  popFalse: true,
+  popMisleading: true,
+  popTrue: true,
+  popUnverifiable: true,
+  glowFalse: false,
+  glowMisleading: false,
+  glowTrue: false,
   glowUnverifiable: false,
-  // In glow mode, which verdicts still pop up (with the words) as well as glowing.
-  glowPopFalse: true,
-  glowPopMisleading: false,
-  glowPopTrue: false,
-  glowPopUnverifiable: false,
   // How strong the glow is, 5–100.
   glowStrength: 40,
   groqApiKey: '',
@@ -54,16 +49,14 @@ self.FACTFLAG_SETTINGS_INFO = {
   enabled: { type: 'boolean', label: 'FactFlag on/off', about: 'Turns all checking on or off.' },
   soundEnabled: { type: 'boolean', label: 'Sound', about: 'Play a ding when a FALSE claim is flagged.' },
   liveList: { type: 'boolean', label: 'Live claims list', about: 'Claims appear in the list only once they have been said (off = show every claim found so far).' },
-  autoOpenList: { type: 'boolean', label: 'Pop up every claim', about: 'Each claim pops up for 10 seconds right after it is said. Off = only FALSE claims pop up. Ignored in glow mode.' },
   alertTiming: { type: 'enum', values: ['start', 'end'], label: 'Alert at', about: "When pop-ups, glows and the ding come: 'end' = right after the speaker finishes the claim, 'start' = as they begin it." },
-  glowMode: { type: 'boolean', label: 'Glow mode', about: 'Instead of pop-ups, the edge of the video softly glows in the verdict colour (red false, orange misleading, green true, grey cannot tell).' },
-  glowFalse: { type: 'boolean', label: 'Glow for FALSE', about: 'In glow mode, glow red for false claims.' },
-  glowMisleading: { type: 'boolean', label: 'Glow for MISLEADING', about: 'In glow mode, glow orange for misleading claims.' },
-  glowTrue: { type: 'boolean', label: 'Glow for TRUE', about: 'In glow mode, glow green for true and likely-true claims.' },
-  glowUnverifiable: { type: 'boolean', label: "Glow for CAN'T TELL", about: 'In glow mode, glow grey for claims that could not be verified.' },
-  glowPopFalse: { type: 'boolean', label: 'Pop up FALSE in glow mode', about: 'In glow mode, also pop up false claims with the words.' },
-  glowPopMisleading: { type: 'boolean', label: 'Pop up MISLEADING in glow mode', about: 'In glow mode, also pop up misleading claims with the words.' },
-  glowPopTrue: { type: 'boolean', label: 'Pop up TRUE in glow mode', about: 'In glow mode, also pop up true claims with the words.' },
-  glowPopUnverifiable: { type: 'boolean', label: "Pop up CAN'T TELL in glow mode", about: 'In glow mode, also pop up unverifiable claims with the words.' },
+  popFalse: { type: 'boolean', label: 'Pop up FALSE', about: 'Pop up false claims (claim, verdict, source) for 10 seconds right after they are said.' },
+  popMisleading: { type: 'boolean', label: 'Pop up MISLEADING', about: 'Pop up misleading claims.' },
+  popTrue: { type: 'boolean', label: 'Pop up TRUE', about: 'Pop up true and likely-true claims.' },
+  popUnverifiable: { type: 'boolean', label: "Pop up CAN'T TELL", about: 'Pop up claims that could not be verified.' },
+  glowFalse: { type: 'boolean', label: 'Glow for FALSE', about: 'The edge of the video glows red for false claims.' },
+  glowMisleading: { type: 'boolean', label: 'Glow for MISLEADING', about: 'Glow orange for misleading claims.' },
+  glowTrue: { type: 'boolean', label: 'Glow for TRUE', about: 'Glow green for true and likely-true claims.' },
+  glowUnverifiable: { type: 'boolean', label: "Glow for CAN'T TELL", about: 'Glow grey for claims that could not be verified.' },
   glowStrength: { type: 'number', min: 5, max: 100, label: 'Glow strength', about: 'How strong the glow is, 5 to 100 (default 40).' }
 };

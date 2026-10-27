@@ -7,8 +7,8 @@ function setStatus(text, kind) {
   $('status').className = kind || '';
 }
 
-const GLOW_FIELDS = ['glowFalse', 'glowMisleading', 'glowTrue', 'glowUnverifiable',
-  'glowPopFalse', 'glowPopMisleading', 'glowPopTrue', 'glowPopUnverifiable'];
+const GLOW_FIELDS = ['popFalse', 'popMisleading', 'popTrue', 'popUnverifiable',
+  'glowFalse', 'glowMisleading', 'glowTrue', 'glowUnverifiable'];
 
 async function load() {
   const s = { ...D, ...(await chrome.storage.local.get(Object.keys(D))) };
@@ -16,19 +16,16 @@ async function load() {
   $('enabled').checked = !!s.enabled;
   $('soundEnabled').checked = !!s.soundEnabled;
   $('liveList').checked = !!s.liveList;
-  $('autoOpenList').checked = !!s.autoOpenList;
-  $('glowMode').checked = !!s.glowMode;
   $('alertTiming').value = s.alertTiming === 'end' ? 'end' : 'start';
   $('glowStrength').value = s.glowStrength;
   $('glowStrengthValue').textContent = `${s.glowStrength}%`;
   for (const k of GLOW_FIELDS) $(k).checked = !!s[k];
-  $('glowKinds').hidden = !s.glowMode;
   $('provider').value = s.provider || 'chatgpt';
   updateProviderNote();
 }
 
 async function save() {
-  const values = { enabled: $('enabled').checked, soundEnabled: $('soundEnabled').checked, liveList: $('liveList').checked, autoOpenList: $('autoOpenList').checked, glowMode: $('glowMode').checked, provider: $('provider').value };
+  const values = { enabled: $('enabled').checked, soundEnabled: $('soundEnabled').checked, liveList: $('liveList').checked, provider: $('provider').value };
   for (const k of GLOW_FIELDS) values[k] = $(k).checked;
   values.alertTiming = $('alertTiming').value;
   values.glowStrength = Number($('glowStrength').value);
@@ -282,8 +279,6 @@ $('resetModels').addEventListener('click', () => {
 $('enabled').addEventListener('change', save);
 $('soundEnabled').addEventListener('change', save);
 $('liveList').addEventListener('change', save);
-$('autoOpenList').addEventListener('change', save);
-$('glowMode').addEventListener('change', save);
 $('alertTiming').addEventListener('change', save);
 // Glow strength: preview while dragging, save when let go.
 function previewGlow() {

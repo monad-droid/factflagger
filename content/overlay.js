@@ -55,25 +55,21 @@ self.FactFlagOverlay = (() => {
   let flashId = null;
   let shownKey = '';
   let liveList = self.FACTFLAG_DEFAULTS.liveList;
-  let autoOpenList = self.FACTFLAG_DEFAULTS.autoOpenList;
-  let glowMode = self.FACTFLAG_DEFAULTS.glowMode;
   let alertTiming = self.FACTFLAG_DEFAULTS.alertTiming;
   let glowStrength = self.FACTFLAG_DEFAULTS.glowStrength;
   // Which verdicts glow, e.g. { false: true, true: false, ... }.
   const GLOW_KEYS = { false: 'glowFalse', misleading: 'glowMisleading', true: 'glowTrue', unverifiable: 'glowUnverifiable' };
-  // Which verdicts still pop up (with words) in glow mode.
-  const POP_KEYS = { false: 'glowPopFalse', misleading: 'glowPopMisleading', true: 'glowPopTrue', unverifiable: 'glowPopUnverifiable' };
+  // Which verdicts pop up (with the words).
+  const POP_KEYS = { false: 'popFalse', misleading: 'popMisleading', true: 'popTrue', unverifiable: 'popUnverifiable' };
   const glowOn = {};
   const popOn = {};
   for (const [kind, key] of Object.entries(GLOW_KEYS)) glowOn[kind] = self.FACTFLAG_DEFAULTS[key];
   for (const [kind, key] of Object.entries(POP_KEYS)) popOn[kind] = self.FACTFLAG_DEFAULTS[key];
-  chrome.storage.local.get(['liveList', 'autoOpenList', 'glowMode', 'alertTiming', 'glowStrength', ...Object.values(GLOW_KEYS), ...Object.values(POP_KEYS)]).then((s) => {
+  chrome.storage.local.get(['liveList', 'alertTiming', 'glowStrength', ...Object.values(GLOW_KEYS), ...Object.values(POP_KEYS)]).then((s) => {
     for (const [kind, key] of Object.entries(POP_KEYS)) if (typeof s[key] === 'boolean') popOn[kind] = s[key];
     if (s.alertTiming === 'start' || s.alertTiming === 'end') alertTiming = s.alertTiming;
     if (Number.isFinite(s.glowStrength)) glowStrength = s.glowStrength;
     if (typeof s.liveList === 'boolean') liveList = s.liveList;
-    if (typeof s.autoOpenList === 'boolean') autoOpenList = s.autoOpenList;
-    if (typeof s.glowMode === 'boolean') glowMode = s.glowMode;
     for (const [kind, key] of Object.entries(GLOW_KEYS)) if (typeof s[key] === 'boolean') glowOn[kind] = s[key];
     if (listOpen) renderList();
   });
@@ -83,12 +79,8 @@ self.FactFlagOverlay = (() => {
     for (const [kind, key] of Object.entries(POP_KEYS)) if (changes[key]) popOn[kind] = !!changes[key].newValue;
     if (changes.glowStrength && Number.isFinite(changes.glowStrength.newValue)) glowStrength = changes.glowStrength.newValue;
     if (changes.alertTiming) alertTiming = changes.alertTiming.newValue === 'end' ? 'end' : 'start';
-    if (!changes.liveList && !changes.autoOpenList && !changes.glowMode) return;
-    if (changes.liveList) liveList = !!changes.liveList.newValue;
-    if (changes.glowMode) glowMode = !!changes.glowMode.newValue;
-    if (changes.autoOpenList) {
-      autoOpenList = !!changes.autoOpenList.newValue;
-    }
+    if (!changes.liveList) return;
+    liveList = !!changes.liveList.newValue;
     shownKey = '';
     if (listOpen) renderList();
   });
@@ -266,16 +258,12 @@ self.FactFlagOverlay = (() => {
     if (prev === null || t < prev || t - prev > 3) return false;
     const fresh = allClaims.filter((c) => ready(c) && alertMoment(c) > prev && alertMoment(c) <= t);
     if (!fresh.length) return false;
-    if (glowMode) {
-      glowFor(fresh);
-      // Verdicts set to also pop up do, unless the full list is open.
-      const pop = fresh.filter((c) => popOn[verdictKind(c)]);
-      if (pop.length && !listOpen) showPeek(pickPeek(pop));
-      return false;
-    }
-    // The full list is open: its new rows already show up live.
-    if (listOpen || !autoOpenList) return false;
-    showPeek(pickPeek(fresh));
+    // Glow and pop-up are set separately for each verdict.
+    glowFor(fresh);
+    // While the full list is open, its new rows already show up live.
+    const pop = fresh.filter((c) => popOn[verdictKind(c)]);
+    if (!pop.length || listOpen) return false;
+    showPeek(pickPeek(pop));
     return true;
   }
 
@@ -503,10 +491,8 @@ self.FactFlagOverlay = (() => {
 
   // A FALSE claim was just said: pop it up (or flash it in the open list).
   function alertClaim(claim) {
-    if (glowMode) {
-      glowFor([claim]);
-      if (!popOn.false) return;
-    }
+    glowFor([claim]);
+    if (!popOn.false) return;
     if (listOpen) {
       flashId = claim.id;
       renderList();

@@ -34,9 +34,6 @@
     <label class="toggle">
       <input type="checkbox" id="liveList"> Live claims list (each claim appears right after it's said; off = show all claims found, including ones ahead)
     </label>
-    <label class="toggle">
-      <input type="checkbox" id="autoOpenList"> Pop up each claim for 10 seconds right after it's said (off = only FALSE claims). The full list opens only when you click the status line.
-    </label>
     <div class="row">
       <label for="alertTiming" class="inline">Alert&nbsp;at</label>
       <select id="alertTiming">
@@ -44,24 +41,22 @@
         <option value="end">the end of the claim (verdict is a little surer to be ready)</option>
       </select>
     </div>
-    <label class="toggle">
-      <input type="checkbox" id="glowMode"> Glow mode: instead of a pop-up, the edge of the video softly glows in the verdict's colour. No words unless you open the list.
-    </label>
+    <p class="label-like">Right after a claim is said</p>
     <div id="glowKinds" class="sub">
       <table class="glow-grid">
-        <tr><th></th><th>Glow</th><th>Also pop up<br><span class="note">with the words</span></th></tr>
+        <tr><th></th><th>Pop up<br><span class="note">claim + verdict, 10 s</span></th><th>Glow<br><span class="note">edge of the video</span></th></tr>
         <tr><td><span class="swatch" style="background:#ff453a"></span> False</td>
-          <td><input type="checkbox" id="glowFalse" aria-label="Glow for false"></td>
-          <td><input type="checkbox" id="glowPopFalse" aria-label="Pop up false"></td></tr>
+          <td><input type="checkbox" id="popFalse" aria-label="Pop up false"></td>
+          <td><input type="checkbox" id="glowFalse" aria-label="Glow for false"></td></tr>
         <tr><td><span class="swatch" style="background:#ff9f0a"></span> Misleading</td>
-          <td><input type="checkbox" id="glowMisleading" aria-label="Glow for misleading"></td>
-          <td><input type="checkbox" id="glowPopMisleading" aria-label="Pop up misleading"></td></tr>
+          <td><input type="checkbox" id="popMisleading" aria-label="Pop up misleading"></td>
+          <td><input type="checkbox" id="glowMisleading" aria-label="Glow for misleading"></td></tr>
         <tr><td><span class="swatch" style="background:#30d158"></span> True (and likely true)</td>
-          <td><input type="checkbox" id="glowTrue" aria-label="Glow for true"></td>
-          <td><input type="checkbox" id="glowPopTrue" aria-label="Pop up true"></td></tr>
+          <td><input type="checkbox" id="popTrue" aria-label="Pop up true"></td>
+          <td><input type="checkbox" id="glowTrue" aria-label="Glow for true"></td></tr>
         <tr><td><span class="swatch" style="background:#bebebe"></span> Can't tell</td>
-          <td><input type="checkbox" id="glowUnverifiable" aria-label="Glow for can't tell"></td>
-          <td><input type="checkbox" id="glowPopUnverifiable" aria-label="Pop up can't tell"></td></tr>
+          <td><input type="checkbox" id="popUnverifiable" aria-label="Pop up can't tell"></td>
+          <td><input type="checkbox" id="glowUnverifiable" aria-label="Glow for can't tell"></td></tr>
       </table>
       <div class="glow-strength">
         <label for="glowStrength" class="inline">Glow strength</label>
