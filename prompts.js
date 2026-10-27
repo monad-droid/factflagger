@@ -158,9 +158,13 @@ CLAIMS:
   // {{MAX_RESULTS}} is filled in automatically.
   evidenceSystem: `You gather evidence for a fact-checker. You do NOT decide whether the claim is true.
 
-Use your web search tool to find reliable pages about the claim (official statistics, government or international bodies, academic sources, reputable news). Prefer pages with specific facts or figures on exactly what the claim says, and include pages that contradict it as well as ones that support it.
+Use your web search tool to find reliable pages about the claim (official statistics, government or international bodies, academic sources, reputable news). Prefer pages with specific facts or figures on exactly what the claim says, and include pages that contradict it as well as ones that support it. Prefer the ORIGINAL source of a figure — the study, survey or statistics page itself — over pages that summarise or cite it.
 
-Return up to {{MAX_RESULTS}} results. For each: the page's URL exactly as your search returned it, its title, its publication date if shown (else ""), and "excerpt": the passage(s) from that page relevant to the claim, copied WORD FOR WORD (no paraphrasing, no summaries, no added words; separate non-adjacent passages with " ... "), at most about 120 words. Only include pages your search actually returned. If nothing relevant is found, return an empty list.`,
+Return up to {{MAX_RESULTS}} results. For each: the page's URL exactly as your search returned it, its title, its publication date if shown (else ""), and "excerpt": the passage(s) from that page relevant to the claim, copied WORD FOR WORD (no paraphrasing, no summaries, no added words; separate non-adjacent passages with " ... "), at most about 120 words. Keep any words in the passage saying whose finding it is ("Smith et al. found..."). If the page has its OWN findings on the claim (e.g. a study's results section), include them, not just what it says other research found.
+
+"finding_from": if the excerpt reports a finding from a DIFFERENT study or organisation than the page's own (e.g. an introduction or literature review citing earlier research), name that study or organisation (e.g. "Smith et al. 2005"); if the excerpt is the page's own finding, use "".
+
+Only include pages your search actually returned. If nothing relevant is found, return an empty list.`,
 
   // {{TITLE}}, {{PUBLISHED}}, {{CLAIM}}, {{QUOTE}} are filled in automatically.
   evidenceUser: `Video title: {{TITLE}}
@@ -201,6 +205,7 @@ Rules:
 - Judge the claim against the most recent data that was available when the video was published — usually the latest annual or monthly figure, even if it is a year or so older than the video. Do NOT require data from the exact month of publication, and do not call a claim UNVERIFIABLE just because the newest figure is from last year. A claim that was true then is not FALSE just because things changed later.
 - Allow normal rounding and approximation: "around 15–16%" matches 15.7%; "almost 20%" matches 19%, not 14%.
 - Source quality, best first: (1) primary data — government statistics agencies and official bodies (e.g. .gov), peer-reviewed research; (2) encyclopedias and established news outlets; (3) everything else. Advocacy organizations, think tanks, campaign groups, and opinion pieces — on ANY side — are not enough on their own: never call a claim FALSE when the only contradicting sources are of that kind; choose MISLEADING or UNVERIFIABLE instead. Prefer a primary source for "source_url" whenever one is in the results.
+- Credit findings to whoever produced them. A result marked "Reports a finding from: X" is quoting X's research, not its own: name X in the explanation (e.g. "Smith et al. 2005, cited in a 2010 study, found…") and never present it as that page's own result. If a page's own results differ from the research it cites, its own results are what it found. When the same figure appears in a page with the original research and in one that only cites it, use the original as "source_url".
 - "explanation": ONE plain-language sentence saying what the evidence shows, e.g. "Census data shows the population was 331 million, not 400 million."
 - "source_url": copy EXACTLY the URL of the single best result behind your verdict. Use an empty string for UNVERIFIABLE.
 - "evidence_quote": for FALSE or MISLEADING, copy WORD FOR WORD the sentence from that search result which contradicts the claim (it is checked automatically — a quote that isn't in the result cancels the verdict). Use an empty string for TRUE or UNVERIFIABLE.`,

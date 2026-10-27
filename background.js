@@ -134,17 +134,21 @@ function buildSentences(segments) {
 
   for (const seg of segments) {
     const segEnd = seg.start + (seg.dur || 0);
+    // Each caption line keeps its own timing ("parts"), so a claim can be
+    // placed by its words rather than by the start of a long sentence.
+    const part = { start: seg.start, end: segEnd, text: seg.text };
     if (SOUND_TAG.test(seg.text)) {
       flush();
-      sentences.push({ start: seg.start, end: segEnd, text: seg.text });
+      sentences.push({ start: seg.start, end: segEnd, text: seg.text, parts: [part] });
       continue;
     }
     if (cur && !hasPunctuation && seg.start - cur.end > PAUSE_SPLIT_SECONDS) flush();
     if (!cur) {
-      cur = { start: seg.start, end: segEnd, text: seg.text };
+      cur = { start: seg.start, end: segEnd, text: seg.text, parts: [part] };
     } else {
       cur.text += ` ${seg.text}`;
       cur.end = Math.max(cur.end, segEnd);
+      cur.parts.push(part);
     }
     const words = cur.text.split(/\s+/).length;
     if (SENTENCE_END.test(cur.text) || words >= MAX_SENTENCE_WORDS ||
@@ -235,6 +239,54 @@ async function aiJson(settings, role, { system, user, schemaName, schema, reason
   return r;
 }
 
+// Words for matching: lower case, no punctuation, "%" as "percent".
+function matchWords(text) {
+  return String(text || '').toLowerCase().replace(/%/g, ' percent ').replace(/[’']/g, '')
+    .split(/[^a-z0-9]+/).filter(Boolean);
+}
+
+// Find when the speaker said `quote`, from the caption lines' own timing:
+// { t: when its first words start, tEnd: when its last words end }, or null
+// if the words can't be found. `hintT` (the model's line number) picks
+// between repeats of the same words.
+function locateQuote(sentences, quote, hintT) {
+  const q = matchWords(quote);
+  if (q.length < 2) return null;
+  // Every caption word with an estimated time (spread evenly over its line,
+  // which ends no later than the next line starts).
+  const parts = sentences.flatMap((s) => s.parts || [{ start: s.start, end: s.end, text: s.text }]);
+  const words = [];
+  parts.forEach((p, i) => {
+    const end = Math.max(p.start, Math.min(p.end, parts[i + 1]?.start ?? p.end));
+    const w = matchWords(p.text);
+    w.forEach((word, j) => words.push({
+      word,
+      start: p.start + ((end - p.start) * j) / w.length,
+      end: p.start + ((end - p.start) * (j + 1)) / w.length
+    }));
+  });
+  const find = (needle, from = 0) => {
+    const hits = [];
+    for (let i = from; i + needle.length <= words.length; i++) {
+      if (needle.every((w, k) => words[i + k].word === w)) hits.push(i);
+    }
+    return hits;
+  };
+  for (const k of [4, 3, 2]) {
+    if (q.length < k) continue;
+    const starts = find(q.slice(0, k));
+    if (!starts.length) continue;
+    const startIdx = starts.reduce((a, b) =>
+      (Math.abs(words[b].start - hintT) < Math.abs(words[a].start - hintT) ? b : a));
+    // The quote's last words, soon after its first words.
+    const maxEnd = startIdx + q.length * 2 + 10;
+    const ends = find(q.slice(-k), startIdx).filter((i) => i + k - 1 <= maxEnd);
+    const endIdx = ends.length ? ends[0] + k - 1 : Math.min(words.length - 1, startIdx + q.length - 1);
+    return { t: words[startIdx].start, tEnd: words[endIdx].end };
+  }
+  return null;
+}
+
 // When the claim has been fully said: the end of the sentence it starts in, or
 // of later sentences too if the speaker's quoted words run longer than that.
 function claimEnd(chunk, firstSentence, quote) {
@@ -295,8 +347,15 @@ async function detectClaimsInChunk(chunk, meta, settings, concepts, onWait) {
 
   const claims = Array.isArray(json.claims) ? json.claims : [];
   const valid = claims.filter((c) => c && typeof c.claim === 'string' && c.claim.trim());
+  // Place each claim by finding the speaker's words in the captions; the
+  // model's line number is only a fallback (it is sometimes a line or two off,
+  // and one "sentence" in unpunctuated auto-captions can run 30 seconds).
+  for (const c of valid) {
+    const at = locateQuote([...chunk.sentences, ...chunk.after], c.quote, Number(c.t));
+    if (at) { c.t = at.t; c.tEnd = at.tEnd; c.located = true; }
+  }
   // Drop claims outside this chunk (e.g. taken from the context lines by mistake).
-  const inChunk = (c) => Number(c.t) >= Math.floor(chunk.start) && Number(c.t) <= chunk.end;
+  const inChunk = (c) => Number(c.t) >= Math.floor(chunk.start) - 0.5 && Number(c.t) <= chunk.end;
   const kept = [];
   const dropped = { score: 0, outside: 0, metaphor: [] };
   for (const c of valid) {
@@ -313,12 +372,18 @@ async function detectClaimsInChunk(chunk, meta, settings, concepts, onWait) {
     .sort((a, b) => b.checkworthiness - a.checkworthiness)
     .slice(0, P.maxClaimsPerChunk)
     .map((c) => {
-      // Snap the timestamp to the start of the sentence it falls in.
-      const t = Number(c.t);
-      const line = [...chunk.sentences].reverse().find((s) => s.start <= t + 0.5) || chunk.sentences[0];
+      let t = Number(c.t);
+      let tEnd = Number(c.tEnd);
+      if (!c.located) {
+        // Words not found: snap to the start of the sentence the model named.
+        const line = [...chunk.sentences].reverse().find((s) => s.start <= t + 0.5) || chunk.sentences[0];
+        t = line.start;
+        tEnd = claimEnd(chunk, line, c.quote);
+        console.info(LOG, `claim at ${fmtTime(t)}: couldn't find the speaker's words in the captions — timed by sentence`);
+      }
       return {
-        t: line.start,
-        tEnd: claimEnd(chunk, line, c.quote),
+        t,
+        tEnd,
         claim: c.claim.trim(),
         quote: String(c.quote || '').trim().replace(/^["“”'‘’]+|["“”'‘’]+$/g, '').trim(),
         checkworthiness: Number(c.checkworthiness)
@@ -363,7 +428,8 @@ async function judgeWithResults(claim, meta, settings, results, onWait) {
     return { verdict: 'UNVERIFIABLE', explanation: 'The web search returned no results.', sourceUrl: '', sourceTitle: '' };
   }
   const resultsText = results.map((r, i) =>
-    `[${i + 1}] ${r.title}\nURL: ${r.url}${r.published ? `\nPublished: ${r.published}` : ''}\n${r.content}`
+    `[${i + 1}] ${r.title}\nURL: ${r.url}${r.published ? `\nPublished: ${r.published}` : ''}` +
+    `${r.findingFrom ? `\nReports a finding from: ${r.findingFrom} (not this page's own research)` : ''}\n${r.content}`
   ).join('\n\n');
 
   const { json, usage } = await aiJson(settings, 'strong', {
@@ -433,9 +499,10 @@ const EVIDENCE_SCHEMA = {
           url: { type: 'string' },
           title: { type: 'string' },
           published: { type: 'string' },
-          excerpt: { type: 'string' }
+          excerpt: { type: 'string' },
+          finding_from: { type: 'string' }
         },
-        required: ['url', 'title', 'published', 'excerpt'],
+        required: ['url', 'title', 'published', 'excerpt', 'finding_from'],
         additionalProperties: false
       }
     }
@@ -470,7 +537,15 @@ async function chatgptGatherEvidence(claim, meta, settings, onWait) {
     const page = r.citations.find((c) => sameUrl(c.url, x.url));
     if (!page) continue; // not a page this search returned
     const content = String(x.excerpt || '').trim();
-    if (content) results.push({ url: page.url, title: String(x.title || page.title || ''), published: x.published || '', content });
+    if (content) {
+      results.push({
+        url: page.url,
+        title: String(x.title || page.title || ''),
+        published: x.published || '',
+        findingFrom: String(x.finding_from || '').trim(),
+        content
+      });
+    }
   }
   console.info(LOG, `evidence ${fmtTime(claim.t)}: ${r.model} took ${(r.ms / 1000).toFixed(1)}s, ` +
     `${r.webSearches} search(es), ${results.length} of ${found.length} passage(s) from pages the search returned`);
@@ -660,7 +735,7 @@ async function triageClaims(claims, meta, settings, onWait) {
 const BEHIND_SLACK_SECONDS = 15; // a claim that started a moment ago is still being heard
 const MIN_LEAD_SECONDS = 10;     // a verdict ready with less time to spare than this is "too close"
 const LEAD_STEP_SECONDS = 15;    // how much to widen the window when that happens
-const STATE_VERSION = 11; // bump when the saved format, chunking or prompts change
+const STATE_VERSION = 12; // bump when the saved format, chunking or prompts change
 
 const videoKey = (videoId) => `video:${videoId}`;
 const transcriptKey = (videoId) => `transcript:${videoId}`;

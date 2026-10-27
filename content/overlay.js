@@ -240,8 +240,11 @@ self.FactFlagOverlay = (() => {
       a.href = c.sourceUrl;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
-      try { a.textContent = new URL(c.sourceUrl).hostname.replace(/^www\./, ''); } catch (_) { a.textContent = 'source'; }
-      src.append('Source: ', a);
+      let host = 'source';
+      try { host = new URL(c.sourceUrl).hostname.replace(/^www\./, ''); } catch (_) {}
+      // The page's title (when known) says which study or report it is.
+      a.textContent = c.sourceTitle ? c.sourceTitle : host;
+      src.append('Source: ', a, ...(c.sourceTitle ? [` (${host})`] : []));
       row.appendChild(src);
     }
     return row;
@@ -401,7 +404,7 @@ self.FactFlagOverlay = (() => {
       '',
       `FactFlag verdict: ${claim.verdict || 'FALSE'}${claim.explanation ? ` — ${claim.explanation}` : ''}`,
       claim.evidenceQuote ? `Source says: "${claim.evidenceQuote}"` : '',
-      claim.sourceUrl ? `Source: ${claim.sourceUrl}` : ''
+      claim.sourceUrl ? `Source: ${claim.sourceTitle ? `${claim.sourceTitle} — ` : ''}${claim.sourceUrl}` : ''
     ].filter((l, i, all) => l !== '' || (i > 0 && all[i - 1] !== '')).join('\n').trim();
   }
 
