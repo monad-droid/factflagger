@@ -18,7 +18,7 @@ async function load() {
   $('liveList').checked = !!s.liveList;
   $('autoOpenList').checked = !!s.autoOpenList;
   $('glowMode').checked = !!s.glowMode;
-  $('alertTiming').value = s.alertTiming === 'start' ? 'start' : 'end';
+  $('alertTiming').value = s.alertTiming === 'end' ? 'end' : 'start';
   $('glowStrength').value = s.glowStrength;
   $('glowStrengthValue').textContent = `${s.glowStrength}%`;
   for (const k of GLOW_FIELDS) $(k).checked = !!s[k];

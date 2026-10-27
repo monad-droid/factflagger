@@ -17,9 +17,9 @@ self.FACTFLAG_DEFAULTS = {
   // edge fades in and out in the verdict's colour. No words until you open
   // the list yourself.
   glowMode: false,
-  // When alerts (pop-up, glow, ding, live list row) come: 'end' = right after
-  // the speaker finishes the claim; 'start' = as they begin saying it.
-  alertTiming: 'end',
+  // When alerts (pop-up, glow, ding, live list row) come: 'start' = as the
+  // speaker begins saying the claim; 'end' = right after they finish it.
+  alertTiming: 'start',
   // Which verdicts glow in glow mode (fewer = less distraction).
   glowFalse: true,
   glowMisleading: true,
@@ -55,7 +55,7 @@ self.FACTFLAG_SETTINGS_INFO = {
   soundEnabled: { type: 'boolean', label: 'Sound', about: 'Play a ding when a FALSE claim is flagged.' },
   liveList: { type: 'boolean', label: 'Live claims list', about: 'Claims appear in the list only once they have been said (off = show every claim found so far).' },
   autoOpenList: { type: 'boolean', label: 'Pop up every claim', about: 'Each claim pops up for 10 seconds right after it is said. Off = only FALSE claims pop up. Ignored in glow mode.' },
-  alertTiming: { type: 'enum', values: ['end', 'start'], label: 'Alert at', about: "When pop-ups, glows and the ding come: 'end' = right after the speaker finishes the claim, 'start' = as they begin it." },
+  alertTiming: { type: 'enum', values: ['start', 'end'], label: 'Alert at', about: "When pop-ups, glows and the ding come: 'end' = right after the speaker finishes the claim, 'start' = as they begin it." },
   glowMode: { type: 'boolean', label: 'Glow mode', about: 'Instead of pop-ups, the edge of the video softly glows in the verdict colour (red false, orange misleading, green true, grey cannot tell).' },
   glowFalse: { type: 'boolean', label: 'Glow for FALSE', about: 'In glow mode, glow red for false claims.' },
   glowMisleading: { type: 'boolean', label: 'Glow for MISLEADING', about: 'In glow mode, glow orange for misleading claims.' },

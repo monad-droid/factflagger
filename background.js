@@ -6,8 +6,14 @@ const GROQ_BASE = 'https://api.groq.com/openai/v1';
 const CHUNK_SECONDS = 60;   // transcript is scanned for claims a minute at a time
 const LOG = '[FactFlag]';
 
-chrome.runtime.onInstalled.addListener((details) => {
+chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === 'install') chrome.runtime.openOptionsPage();
+  // 0.12.1 made "alert at the start of the claim" the default. The settings
+  // page saved the old default ('end') for everyone, so switch it once.
+  const { alertTimingStartMigrated } = await chrome.storage.local.get('alertTimingStartMigrated');
+  if (!alertTimingStartMigrated) {
+    await chrome.storage.local.set({ alertTiming: 'start', alertTimingStartMigrated: true });
+  }
 });
 
 // Toolbar button opens settings.

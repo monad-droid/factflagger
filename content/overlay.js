@@ -82,7 +82,7 @@ self.FactFlagOverlay = (() => {
     for (const [kind, key] of Object.entries(GLOW_KEYS)) if (changes[key]) glowOn[kind] = !!changes[key].newValue;
     for (const [kind, key] of Object.entries(POP_KEYS)) if (changes[key]) popOn[kind] = !!changes[key].newValue;
     if (changes.glowStrength && Number.isFinite(changes.glowStrength.newValue)) glowStrength = changes.glowStrength.newValue;
-    if (changes.alertTiming) alertTiming = changes.alertTiming.newValue === 'start' ? 'start' : 'end';
+    if (changes.alertTiming) alertTiming = changes.alertTiming.newValue === 'end' ? 'end' : 'start';
     if (!changes.liveList && !changes.autoOpenList && !changes.glowMode) return;
     if (changes.liveList) liveList = !!changes.liveList.newValue;
     if (changes.glowMode) glowMode = !!changes.glowMode.newValue;
